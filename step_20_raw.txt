@@ -1,0 +1,100 @@
+﻿Created At: 2026-05-26T14:37:51Z
+Completed At: 2026-05-26T14:37:51Z
+File Path: `file:///c:/Users/barclaym/Documents/AppSecretaria/lib/screens/historico_screen.dart`
+Total Lines: 1265
+Total Bytes: 47597
+Showing lines 1 to 800
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: import 'dart:convert';
+2: import 'package:flutter/material.dart';
+3: import 'package:intl/intl.dart';
+4: import 'package:url_launcher/url_launcher.dart';
+5: import '../services/google_sheets_service.dart';
+6: import '../models/report_model.dart';
+7: import '../utils/pdf_generator.dart';
+8: import '../widgets/app_ui.dart';
+9: 
+10: class HistoricoScreen extends StatefulWidget {
+11:   const HistoricoScreen({super.key});
+12: 
+13:   @override
+14:   State<HistoricoScreen> createState() => _HistoricoScreenState();
+15: }
+16: 
+17: class _HistoricoScreenState extends State<HistoricoScreen> {
+18:   final GoogleSheetsService _sheetsService = GoogleSheetsService();
+19:   final _searchController = TextEditingController();
+20: 
+21:   List<Map<String, dynamic>> _allHistory = [];
+22:   List<Map<String, dynamic>> _filtered = [];
+23:   bool _isLoading = true;
+24:   String _searchQuery = '';
+25:   String? _selectedReportNumber;
+26: 
+27:   @override
+28:   void initState() {
+29:     super.initState();
+30:     _loadHistory();
+31:   }
+32: 
+33:   @override
+34:   void dispose() {
+35:     _searchController.dispose();
+36:     super.dispose();
+37:   }
+38: 
+39:   Future<void> _loadHistory() async {
+40:     setState(() => _isLoading = true);
+41:     try {
+42:       final data = await _sheetsService.fetchHistory();
+43:       debugPrint('HistÃ³rico recebido: ${data.length}');
+44:       if (mounted) {
+45:         setState(() {
+46:           _allHistory = data;
+47:           _applyFilter();
+48:           _isLoading = false;
+49:         });
+50:      
+<truncated 30428 bytes>
+  borderRadius: BorderRadius.circular(16),
+762:         onTap: () => _showDetail(h),
+763:         child: Padding(
+764:           padding: const EdgeInsets.all(16),
+765:           child: Column(
+766:             crossAxisAlignment: CrossAxisAlignment.start,
+767:             children: [
+768:               Row(
+769:                 crossAxisAlignment: CrossAxisAlignment.start,
+770:                 children: [
+771:                   Expanded(
+772:                     child: Column(
+773:                       crossAxisAlignment: CrossAxisAlignment.start,
+774:                       children: [
+775:                         Text(
+776:                           versao.isNotEmpty
+777:                               ? 'VersÃ£o v${versao.replaceFirst(RegExp(r'^v', caseSensitive: false), '')}'
+778:                               : 'VersÃ£o nÃ£o especificada',
+779:                           style: TextStyle(
+780:                             fontWeight: FontWeight.bold,
+781:                             fontSize: 15,
+782:                             color: colorScheme.primary,
+783:                           ),
+784:                         ),
+785:                         const SizedBox(height: 4),
+786:                         Text(
+787:                           'Visita: $dataVisita',
+788:                           style: TextStyle(
+789:                             fontWeight: FontWeight.w600,
+790:                             fontSize: 13,
+791:                             color: colorScheme.onSurface,
+792:                           ),
+793:                         ),
+794:                       ],
+795:                     ),
+796:                   ),
+797:                   const SizedBox(width: 12),
+798:                   if (tipo.isNotEmpty)
+799:                     _buildChip(
+800:                       tipo,
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.
+

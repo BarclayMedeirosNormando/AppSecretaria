@@ -1,0 +1,325 @@
+﻿[
+    {
+        "id":  "2026-05-22 09:00:25.996262",
+        "creator":  "Barclay de Medeiros Normando",
+        "schoolName":  "ECIT HORACIO DE ALMEIDA",
+        "visitDate":  "2026-05-22T03:00:00.000Z",
+        "isTechnicalAnalysis":  true,
+        "subjects":  [
+                         "Análise Técnica"
+                     ],
+        "technicians":  [
+                            "Barclay de Medeiros Normando",
+                            "Jarley Soares da Costa"
+                        ],
+        "responsiblePerson":  "",
+        "observations":  "A infraestrutura de conectividade da unidade escolar é alimentada por um link de internet de 100 Mbps, fornecido pela operadora RIX. Atualmente, o cabeamento estruturado com pontos de rede físicos encontra-se instalado exclusivamente no laboratório de informática.\n\nConstatou-se que as salas de aula e os demais ambientes da escola não possuem infraestrutura de rede cabeada disponível. Dessa forma, o acesso à internet por parte de professores, alunos e equipe administrativa nesses locais depende integralmente da rede sem fio (Wi-Fi). A rede wireless atualmente utilizada para esse propósito é identificada pelo SSID “HDA PROF” e está configurada com a credencial “mudar123”.\n\nDurante a verificação técnica, foi constatado que o switch Cisco responsável por fornecer conectividade aos Access Points (APs) Cisco encontra-se queimado. Essa falha compromete a distribuição adequada da rede Wi-Fi no ambiente escolar, especialmente nas áreas administrativas e demais espaços que dependem da cobertura sem fio.\n\nPara sanar o problema e melhorar a distribuição do sinal Wi-Fi na unidade escolar, recomenda-se a instalação de novo(s) Access Point(s) no pátio da escola e demais dependencias da escola, aproveitando o cabeamento já existente utilizado anteriormente pelos APs Cisco. Essa medida contribuirá para ampliar a cobertura da rede sem fio e garantir melhor acesso à internet nos ambientes que atualmente não possuem infraestrutura cabeada.",
+        "reportNumber":  "REL-9728923680",
+        "gre":  "01ª GRE (João Pessoa)",
+        "schoolAddress":  "RUA DURVAL COUTINHO, SN ALTO DO MATEUS. 58090-260 João Pessoa - PB.",
+        "schoolCity":  "João Pessoa",
+        "municipio":  "João Pessoa",
+        "schoolInep":  "25094130",
+        "inep":  "25094130",
+        "signatureUrl":  "https://drive.google.com/file/d/19VFppv2vMdVIBIvhjrEmOKflXuKm8x-m/view?usp=drivesdk",
+        "urlAssinatura":  "https://drive.google.com/file/d/19VFppv2vMdVIBIvhjrEmOKflXuKm8x-m/view?usp=drivesdk",
+        "urlFotos":  "https://drive.google.com/file/d/1dcR17kzjR4PdkwzqSWE_aPyPstkrUKgl/view?usp=drivesdk, https://drive.google.com/file/d/1ae7PIAtueKIKjwJ-Eqn5fXAEWPFWH5nV/view?usp=drivesdk, https://drive.google.com/file/d/1hEMJdfdHIRk8lK7sOd7HgFIN3sCCDTRG/view?usp=drivesdk, https://drive.google.com/file/d/1s7dxEMfahi4Q5s3G-iRDDttySR0P_2yS/view?usp=drivesdk",
+        "fotosJson":  "[{\"url\":\"https://drive.google.com/file/d/1dcR17kzjR4PdkwzqSWE_aPyPstkrUKgl/view?usp=drivesdk\",\"path\":\"https://drive.google.com/file/d/1dcR17kzjR4PdkwzqSWE_aPyPstkrUKgl/view?usp=drivesdk\",\"comment\":\"\"},{\"url\":\"https://drive.google.com/file/d/1ae7PIAtueKIKjwJ-Eqn5fXAEWPFWH5nV/view?usp=drivesdk\",\"path\":\"https://drive.google.com/file/d/1ae7PIAtueKIKjwJ-Eqn5fXAEWPFWH5nV/view?usp=drivesdk\",\"comment\":\"\"},{\"url\":\"https://drive.google.com/file/d/1hEMJdfdHIRk8lK7sOd7HgFIN3sCCDTRG/view?usp=drivesdk\",\"path\":\"https://drive.google.com/file/d/1hEMJdfdHIRk8lK7sOd7HgFIN3sCCDTRG/view?usp=drivesdk\",\"comment\":\"\"},{\"url\":\"https://drive.google.com/file/d/1s7dxEMfahi4Q5s3G-iRDDttySR0P_2yS/view?usp=drivesdk\",\"path\":\"https://drive.google.com/file/d/1s7dxEMfahi4Q5s3G-iRDDttySR0P_2yS/view?usp=drivesdk\",\"comment\":\"\"}]",
+        "photos":  [
+                       "@{path=https://drive.google.com/file/d/1dcR17kzjR4PdkwzqSWE_aPyPstkrUKgl/view?usp=drivesdk; url=https://drive.google.com/file/d/1dcR17kzjR4PdkwzqSWE_aPyPstkrUKgl/view?usp=drivesdk; comment=}",
+                       "@{path=https://drive.google.com/file/d/1ae7PIAtueKIKjwJ-Eqn5fXAEWPFWH5nV/view?usp=drivesdk; url=https://drive.google.com/file/d/1ae7PIAtueKIKjwJ-Eqn5fXAEWPFWH5nV/view?usp=drivesdk; comment=}",
+                       "@{path=https://drive.google.com/file/d/1hEMJdfdHIRk8lK7sOd7HgFIN3sCCDTRG/view?usp=drivesdk; url=https://drive.google.com/file/d/1hEMJdfdHIRk8lK7sOd7HgFIN3sCCDTRG/view?usp=drivesdk; comment=}",
+                       "@{path=https://drive.google.com/file/d/1s7dxEMfahi4Q5s3G-iRDDttySR0P_2yS/view?usp=drivesdk; url=https://drive.google.com/file/d/1s7dxEMfahi4Q5s3G-iRDDttySR0P_2yS/view?usp=drivesdk; comment=}"
+                   ],
+        "updatedAt":  "2026-05-25T17:09:27.777Z"
+    },
+    {
+        "id":  "2026-05-22 09:09:41.483659",
+        "creator":  "Barclay de Medeiros Normando",
+        "schoolName":  "EEEF CLAUDINA MANGUEIRA DE MOURA",
+        "visitDate":  "2026-05-22T03:00:00.000Z",
+        "isTechnicalAnalysis":  true,
+        "subjects":  [
+                         "Análise Técnica"
+                     ],
+        "technicians":  [
+                            "Barclay de Medeiros Normando",
+                            "Jarley Soares da Costa"
+                        ],
+        "responsiblePerson":  "",
+        "observations":  "Link Principal: Conexão da CODATA/Tely instalada na sala da direção (teste de velocidade aferido e documentado em anexo).\nDistribuição Sem Fio: O acesso nos ambientes da escola ocorre via rede Wi-Fi (informações da rede nas fotos anexas).\nSalas de Aula: Os ambientes não possuem pontos de rede cabeada, dependendo integralmente da cobertura do sinal Wi-Fi.",
+        "reportNumber":  "REL-9462588674",
+        "gre":  "01ª GRE (João Pessoa)",
+        "schoolAddress":  "R CARTEIRO FRANCISCO INACIO DO REGO FILHO, 43 ALTO DO MATEUS. 58090-570 João Pessoa - PB.",
+        "schoolCity":  "João Pessoa",
+        "municipio":  "João Pessoa",
+        "schoolInep":  "25093827",
+        "inep":  "25093827",
+        "signatureUrl":  "https://drive.google.com/file/d/1kFvJZwPqCUX_DB2RZ-5UUGAbINEYxZMF/view?usp=drivesdk",
+        "urlAssinatura":  "https://drive.google.com/file/d/1kFvJZwPqCUX_DB2RZ-5UUGAbINEYxZMF/view?usp=drivesdk",
+        "urlFotos":  "https://drive.google.com/file/d/1TiuRc_XEMIjMSJB8yCxd8YF0FWu1XB8y/view?usp=drivesdk, https://drive.google.com/file/d/1HzKx47SSSjSpW5YJkv87avG4rgCmrolh/view?usp=drivesdk, https://drive.google.com/file/d/1ENlc5OquEju9eHvesmt6-r-TVPust7mu/view?usp=drivesdk",
+        "fotosJson":  "",
+        "photos":  [
+                       "@{path=https://drive.google.com/file/d/1TiuRc_XEMIjMSJB8yCxd8YF0FWu1XB8y/view?usp=drivesdk; url=https://drive.google.com/file/d/1TiuRc_XEMIjMSJB8yCxd8YF0FWu1XB8y/view?usp=drivesdk; comment=}",
+                       "@{path=https://drive.google.com/file/d/1HzKx47SSSjSpW5YJkv87avG4rgCmrolh/view?usp=drivesdk; url=https://drive.google.com/file/d/1HzKx47SSSjSpW5YJkv87avG4rgCmrolh/view?usp=drivesdk; comment=}",
+                       "@{path=https://drive.google.com/file/d/1ENlc5OquEju9eHvesmt6-r-TVPust7mu/view?usp=drivesdk; url=https://drive.google.com/file/d/1ENlc5OquEju9eHvesmt6-r-TVPust7mu/view?usp=drivesdk; comment=}"
+                   ],
+        "updatedAt":  "2026-05-22T15:10:05.053Z"
+    },
+    {
+        "id":  "2026-05-22 11:35:44.695409",
+        "creator":  "Barclay de Medeiros Normando",
+        "schoolName":  "ECI LUZIA SIMOES BARTOLLINI",
+        "visitDate":  "2026-05-22T03:00:00.000Z",
+        "isTechnicalAnalysis":  true,
+        "subjects":  [
+                         "Análise Técnica"
+                     ],
+        "technicians":  [
+                            "Barclay de Medeiros Normando",
+                            "Jarley Soares da Costa"
+                        ],
+        "responsiblePerson":  "",
+        "observations":  "Status da Conectividade: Interrupção total dos serviços de internet na unidade escolar.\n\nAnálise dos Circuitos:\nLink Oi: Equipamentos ausentes no local (evidência em fotos anexas).\nLink CODATA/Tely: Ativos de rede instalados fisicamente, porém sem comunicação/conexão com a internet (evidência em fotos anexas).\n\nInfraestrutura Interna:\nAs salas de aula não possuem pontos de rede lógica cabeada estruturada.",
+        "reportNumber":  "REL-9461786471",
+        "gre":  "01ª GRE (João Pessoa)",
+        "schoolAddress":  "RUA RADIALISTA GERALDO CAMPOS, SEM NUMERO JARDIM PLANALTO. 58088-060 João Pessoa - PB.",
+        "schoolCity":  "João Pessoa",
+        "municipio":  "João Pessoa",
+        "schoolInep":  "25094106",
+        "inep":  "25094106",
+        "signatureUrl":  "https://drive.google.com/file/d/1Qu4NfvxMKSgFN_dB4M4VYXX-9M6XQCKs/view?usp=drivesdk",
+        "urlAssinatura":  "https://drive.google.com/file/d/1Qu4NfvxMKSgFN_dB4M4VYXX-9M6XQCKs/view?usp=drivesdk",
+        "urlFotos":  "https://drive.google.com/file/d/1JkpDv7XSCLlIjYAnRXFcEHKj2JDgh1qq/view?usp=drivesdk, https://drive.google.com/file/d/1Wgkkpvw8HZwTmYCteWWVojH5aBn3rClS/view?usp=drivesdk, https://drive.google.com/file/d/1hYgTF2uyNlMrLsP79yvcGiZ021PcTGEI/view?usp=drivesdk",
+        "fotosJson":  "",
+        "photos":  [
+                       "@{path=https://drive.google.com/file/d/1JkpDv7XSCLlIjYAnRXFcEHKj2JDgh1qq/view?usp=drivesdk; url=https://drive.google.com/file/d/1JkpDv7XSCLlIjYAnRXFcEHKj2JDgh1qq/view?usp=drivesdk; comment=}",
+                       "@{path=https://drive.google.com/file/d/1Wgkkpvw8HZwTmYCteWWVojH5aBn3rClS/view?usp=drivesdk; url=https://drive.google.com/file/d/1Wgkkpvw8HZwTmYCteWWVojH5aBn3rClS/view?usp=drivesdk; comment=}",
+                       "@{path=https://drive.google.com/file/d/1hYgTF2uyNlMrLsP79yvcGiZ021PcTGEI/view?usp=drivesdk; url=https://drive.google.com/file/d/1hYgTF2uyNlMrLsP79yvcGiZ021PcTGEI/view?usp=drivesdk; comment=}"
+                   ],
+        "updatedAt":  "2026-05-22T14:57:37.310Z"
+    },
+    {
+        "id":  "2026-05-24 09:12:21.707376",
+        "creator":  "Barclay de Medeiros Normando",
+        "schoolName":  "EEEF ISABEL MARIA DAS NEVES",
+        "visitDate":  "2026-05-19T03:00:00.000Z",
+        "isTechnicalAnalysis":  true,
+        "subjects":  [
+                         "Análise Técnica"
+                     ],
+        "technicians":  [
+                            "Jose de Sena Brito Junior"
+                        ],
+        "responsiblePerson":  "",
+        "observations":  "1. Objetivo\r\nAvaliar a infraestrutura de rede do andar térreo da EEFM Isabel Maria das Neves e propor solução para distribuição de sinal de internet na sala dos professores, diretoria e biblioteca.\r\n\r\n2. Situação Encontrada\r\nA escola conta com 2 links de internet ativos: um fornecido pelo Estado e outro pela operadora Tely\r\nAndar térreo sem cabeamento de rede passado até os setores atendidos\r\nSinal Wi-Fi insuficiente nas extremidades do térreo pela distância e estrutura do prédio\r\nEquipamentos de rede existentes (roteador, access points) sem organização e sem rack\r\nBiblioteca com computador instalado, porém sem acesso à internet\r\n3. Solução Proposta\r\nAproveitando os 2 links de internet disponíveis (Estado e Tely), propõe-se a passagem de cabeamento estruturado (Cat5e/Cat6) a partir de um switch de 24 portas instalado em rack no térreo, com 3 roteadores posicionados nas extremidades para garantir cobertura Wi-Fi em toda a extensão do andar:\r\nSala dos Professores – Roteador 1\r\nDiretoria – Roteador 2\r\nBiblioteca – Roteador 3\r\n\r\n4. Materiais para Aquisição\r\nMaterial\r\nQtd.\r\nObservação\r\nSwitch 24 portas (Fast Ethernet ou Gigabit)\r\n1 un.\r\nDistribuição central\r\nRoteador Wi-Fi (dual band recomendado)\r\n3 un.\r\n1 por setor do térreo\r\nCaixa de cabo UTP Cat5e ou Cat6 (305m)\r\n1 cx.\r\nCabeamento estruturado\r\nRack de parede (6U ou 9U)\r\n1 un.\r\nAcomodar switch e patch panel\r\nConectores RJ-45 (pacote c/ 100 un.)\r\n1 pct.\r\nTerminação e crimpagem dos cabos\r\nOrganizador de cabos 1U (enforca gato)\r\n2 un.\r\nAcabamento e organização no rack\r\nNobreak / Estabilizador\r\n1 un.\r\nProteção dos equipamentos\r\n\r\n\r\n5. Conclusão\r\nA aquisição do switch de 24 portas e dos 3 roteadores, combinada à passagem de cabeamento estruturado, é suficiente para atender plenamente os três setores prioritários do andar térreo. Solicita-se autorização para aquisição dos materiais e agendamento do retorno técnico para execução dos serviços.",
+        "reportNumber":  "REL-9624741707",
+        "gre":  "01ª GRE (João Pessoa)",
+        "schoolAddress":  "AV JOAO MACHADO, 484 CENTRO. 58013-520 João Pessoa - PB.",
+        "schoolCity":  "João Pessoa",
+        "municipio":  "João Pessoa",
+        "schoolInep":  "25094556",
+        "inep":  "25094556",
+        "signatureUrl":  "https://drive.google.com/uc?export=download\u0026id=11796VLwsAn1aWEHiCgZJRWCr_swjAqGj",
+        "urlAssinatura":  "https://drive.google.com/uc?export=download\u0026id=11796VLwsAn1aWEHiCgZJRWCr_swjAqGj",
+        "urlFotos":  "",
+        "fotosJson":  "[]",
+        "photos":  [
+
+                   ],
+        "updatedAt":  "2026-05-24T12:13:05.102Z"
+    },
+    {
+        "id":  "2026-05-25 10:55:57.174605",
+        "creator":  "Barclay de Medeiros Normando",
+        "schoolName":  "EEEF PADRE JOAO FELIX",
+        "visitDate":  "2026-05-25T03:00:00.000Z",
+        "isTechnicalAnalysis":  false,
+        "subjects":  [
+                         "Manutenção Preventiva"
+                     ],
+        "technicians":  [
+                            "Jarley Soares da Costa",
+                            "Jose de Sena Brito Junior"
+                        ],
+        "responsiblePerson":  "CERES SUZANA FERREIRA VASCONCELOS",
+        "observations":  "Estamos levando 03 três computador HP elitdesk TOMBAMENTO -00246019\n00353361\n00353384\nPara a secretaria para realizar reparos. Vc",
+        "reportNumber":  "REL-9756941158",
+        "gre":  "01ª GRE (João Pessoa)",
+        "schoolAddress":  "RUA PORTO DO CAPIM, SN VARADOURO. 58010-570 João Pessoa - PB.",
+        "schoolCity":  "João Pessoa",
+        "municipio":  "João Pessoa",
+        "schoolInep":  "25094319",
+        "inep":  "25094319",
+        "signatureUrl":  "https://drive.google.com/uc?export=download\u0026id=1tpnxLXgrHl8mBq5kM2KlIOEg-3hwOmuP",
+        "urlAssinatura":  "https://drive.google.com/uc?export=download\u0026id=1tpnxLXgrHl8mBq5kM2KlIOEg-3hwOmuP",
+        "urlFotos":  "https://drive.google.com/uc?export=download\u0026id=1mPkhm3-miRSI20TQk10YGwtKZDYabXiI, https://drive.google.com/uc?export=download\u0026id=1GHCtmuRZrmuPAXhCdrdIuTEIap1_QQ4O, https://drive.google.com/uc?export=download\u0026id=1-9pW9zUDlm3KS0zVNoHt9UOd7B29bkF2",
+        "fotosJson":  "[{\"url\":\"https://drive.google.com/uc?export=download\u0026id=1mPkhm3-miRSI20TQk10YGwtKZDYabXiI\",\"path\":\"https://drive.google.com/uc?export=download\u0026id=1mPkhm3-miRSI20TQk10YGwtKZDYabXiI\",\"comment\":\"\"},{\"url\":\"https://drive.google.com/uc?export=download\u0026id=1GHCtmuRZrmuPAXhCdrdIuTEIap1_QQ4O\",\"path\":\"https://drive.google.com/uc?export=download\u0026id=1GHCtmuRZrmuPAXhCdrdIuTEIap1_QQ4O\",\"comment\":\"\"},{\"url\":\"https://drive.google.com/uc?export=download\u0026id=1-9pW9zUDlm3KS0zVNoHt9UOd7B29bkF2\",\"path\":\"https://drive.google.com/uc?export=download\u0026id=1-9pW9zUDlm3KS0zVNoHt9UOd7B29bkF2\",\"comment\":\"\"}]",
+        "photos":  [
+                       "@{path=https://drive.google.com/uc?export=download\u0026id=1mPkhm3-miRSI20TQk10YGwtKZDYabXiI; url=https://drive.google.com/uc?export=download\u0026id=1mPkhm3-miRSI20TQk10YGwtKZDYabXiI; comment=}",
+                       "@{path=https://drive.google.com/uc?export=download\u0026id=1GHCtmuRZrmuPAXhCdrdIuTEIap1_QQ4O; url=https://drive.google.com/uc?export=download\u0026id=1GHCtmuRZrmuPAXhCdrdIuTEIap1_QQ4O; comment=}",
+                       "@{path=https://drive.google.com/uc?export=download\u0026id=1-9pW9zUDlm3KS0zVNoHt9UOd7B29bkF2; url=https://drive.google.com/uc?export=download\u0026id=1-9pW9zUDlm3KS0zVNoHt9UOd7B29bkF2; comment=}"
+                   ],
+        "updatedAt":  "2026-05-26T00:56:26.678Z"
+    },
+    {
+        "id":  "2026-05-25 10:03:54.616829",
+        "creator":  "Jarley Soares da Costa",
+        "schoolName":  "EEEF FRANCISCO CAMPOS",
+        "visitDate":  "2026-05-25T03:00:00.000Z",
+        "isTechnicalAnalysis":  false,
+        "subjects":  [
+                         "Manutenção Preventiva"
+                     ],
+        "technicians":  [
+                            "Jarley Soares da Costa",
+                            "Jose de Sena Brito Junior"
+                        ],
+        "responsiblePerson":  "PATRICIA SILVA ROCHA",
+        "observations":  "Foi entregue (02) dois mouse soultech.\nFoi entregue a Patrícia Silva Rocha ",
+        "reportNumber":  "REL-9714234616",
+        "gre":  "01� GRE (Jo�o Pessoa)",
+        "schoolAddress":  "RUA BOURGUEVILLE, SN ANATOLIA. ANATOLIA. 58052-080 Jo�o Pessoa - PB.",
+        "schoolCity":  "Jo�o Pessoa",
+        "municipio":  "Jo�o Pessoa",
+        "schoolInep":  "25093622",
+        "inep":  "25093622",
+        "signatureUrl":  "https://drive.google.com/uc?export=download\u0026id=16ggj4xTGXvk5OEBmAkjRLnljfDSO0_vJ",
+        "urlAssinatura":  "https://drive.google.com/uc?export=download\u0026id=16ggj4xTGXvk5OEBmAkjRLnljfDSO0_vJ",
+        "urlFotos":  "https://drive.google.com/uc?export=download\u0026id=1ouQgQQb-Y3r2J2qpS_jbI5CSkCNFcEkd, https://drive.google.com/uc?export=download\u0026id=1HkGVt2SO8c4V1WU5e2o1ZUvmJ8BKBKnm",
+        "fotosJson":  "[{\"url\":\"https://drive.google.com/uc?export=download\u0026id=1ouQgQQb-Y3r2J2qpS_jbI5CSkCNFcEkd\",\"path\":\"https://drive.google.com/uc?export=download\u0026id=1ouQgQQb-Y3r2J2qpS_jbI5CSkCNFcEkd\",\"comment\":\"\"},{\"url\":\"https://drive.google.com/uc?export=download\u0026id=1HkGVt2SO8c4V1WU5e2o1ZUvmJ8BKBKnm\",\"path\":\"https://drive.google.com/uc?export=download\u0026id=1HkGVt2SO8c4V1WU5e2o1ZUvmJ8BKBKnm\",\"comment\":\"\"}]",
+        "photos":  [
+                       "@{path=https://drive.google.com/uc?export=download\u0026id=1ouQgQQb-Y3r2J2qpS_jbI5CSkCNFcEkd; url=https://drive.google.com/uc?export=download\u0026id=1ouQgQQb-Y3r2J2qpS_jbI5CSkCNFcEkd; comment=}",
+                       "@{path=https://drive.google.com/uc?export=download\u0026id=1HkGVt2SO8c4V1WU5e2o1ZUvmJ8BKBKnm; url=https://drive.google.com/uc?export=download\u0026id=1HkGVt2SO8c4V1WU5e2o1ZUvmJ8BKBKnm; comment=}"
+                   ],
+        "updatedAt":  "2026-05-25T14:17:59.511Z"
+    },
+    {
+        "id":  "2026-05-25 15:36:21.978451",
+        "creator":  "Jarley Soares da Costa",
+        "schoolName":  "EEEFM AUDIOCOMUNICACAO",
+        "visitDate":  "2026-05-25T03:00:00.000Z",
+        "isTechnicalAnalysis":  false,
+        "subjects":  [
+                         "Manutenção Corretiva"
+                     ],
+        "technicians":  [
+                            "Jarley Soares da Costa",
+                            "Jose de Sena Brito Junior"
+                        ],
+        "responsiblePerson":  "HASENCLEVER DA SILVA PIRES",
+        "observations":  "Foi realizado 03 cabeamento na secretaria, um para a impressora e dois para os computadores administrativa, a secretaria está precisando de mais tomadas de energia.",
+        "reportNumber":  "REL-9734181978",
+        "gre":  "01� GRE (Jo�o Pessoa)",
+        "schoolAddress":  "RUA FRANCISCA MOURA, SN ESQUINA COM AV MANDA. JD TREZE DE MAIO. 58025-650 Jo�o Pessoa - PB.",
+        "schoolCity":  "Jo�o Pessoa",
+        "municipio":  "Jo�o Pessoa",
+        "schoolInep":  "25097091",
+        "inep":  "25097091",
+        "signatureUrl":  "https://drive.google.com/uc?export=download\u0026id=1Lz3z90sNGAWs6JGlweegsw4ewSQqTzXi",
+        "urlAssinatura":  "https://drive.google.com/uc?export=download\u0026id=1Lz3z90sNGAWs6JGlweegsw4ewSQqTzXi",
+        "urlFotos":  "https://drive.google.com/uc?export=download\u0026id=1lBYRiThlf_xXh1Bf3lOVd3bEZZYVH7qA, https://drive.google.com/uc?export=download\u0026id=1TyunnIFs_d9xZm1cFDqXoiCv2-weZdWF, https://drive.google.com/uc?export=download\u0026id=1yoFhYFxQr5wWX0LNC8ysF4t3LfNT5MB6",
+        "fotosJson":  "[{\"url\":\"https://drive.google.com/uc?export=download\u0026id=1lBYRiThlf_xXh1Bf3lOVd3bEZZYVH7qA\",\"path\":\"https://drive.google.com/uc?export=download\u0026id=1lBYRiThlf_xXh1Bf3lOVd3bEZZYVH7qA\",\"comment\":\"Feito ponto do computador da secretaria \"},{\"url\":\"https://drive.google.com/uc?export=download\u0026id=1TyunnIFs_d9xZm1cFDqXoiCv2-weZdWF\",\"path\":\"https://drive.google.com/uc?export=download\u0026id=1TyunnIFs_d9xZm1cFDqXoiCv2-weZdWF\",\"comment\":\"\"},{\"url\":\"https://drive.google.com/uc?export=download\u0026id=1yoFhYFxQr5wWX0LNC8ysF4t3LfNT5MB6\",\"path\":\"https://drive.google.com/uc?export=download\u0026id=1yoFhYFxQr5wWX0LNC8ysF4t3LfNT5MB6\",\"comment\":\"\"}]",
+        "photos":  [
+                       "@{path=https://drive.google.com/uc?export=download\u0026id=1lBYRiThlf_xXh1Bf3lOVd3bEZZYVH7qA; url=https://drive.google.com/uc?export=download\u0026id=1lBYRiThlf_xXh1Bf3lOVd3bEZZYVH7qA; comment=Feito ponto do computador da secretaria }",
+                       "@{path=https://drive.google.com/uc?export=download\u0026id=1TyunnIFs_d9xZm1cFDqXoiCv2-weZdWF; url=https://drive.google.com/uc?export=download\u0026id=1TyunnIFs_d9xZm1cFDqXoiCv2-weZdWF; comment=}",
+                       "@{path=https://drive.google.com/uc?export=download\u0026id=1yoFhYFxQr5wWX0LNC8ysF4t3LfNT5MB6; url=https://drive.google.com/uc?export=download\u0026id=1yoFhYFxQr5wWX0LNC8ysF4t3LfNT5MB6; comment=}"
+                   ],
+        "updatedAt":  "2026-05-25T18:36:40.042Z"
+    },
+    {
+        "id":  "2026-05-25 21:37:06.286276",
+        "creator":  "Barclay de Medeiros Normando",
+        "schoolName":  "EEEF FREI MARTINHO",
+        "visitDate":  "2026-05-22T03:00:00.000Z",
+        "isTechnicalAnalysis":  true,
+        "subjects":  [
+                         "Análise Técnica"
+                     ],
+        "technicians":  [
+                            "Barclay de Medeiros Normando",
+                            "Jarley Soares da Costa"
+                        ],
+        "responsiblePerson":  "",
+        "observations":  "O laboratório já conta com cabeamento pré-existente em virtude da divisão da sala. As etapas pendentes para a finalização são:\n\nRemanejar os cabos direcionados à outra sala;\nRealizar a organização física do cabeamento;\nRevisar e, se necessário, refazer a crimpagem dos conectores RJ45.\"",
+        "reportNumber":  "REL-9755826286",
+        "gre":  "01� GRE (Jo�o Pessoa)",
+        "schoolAddress":  "AVENIDA DESEMBARGADOR NOVAIS, SN CRUZ DAS ARMAS. 58085-450 Jo�o Pessoa - PB.",
+        "schoolCity":  "Jo�o Pessoa",
+        "municipio":  "Jo�o Pessoa",
+        "schoolInep":  "25094513",
+        "inep":  "25094513",
+        "signatureUrl":  "https://drive.google.com/uc?export=download\u0026id=1qAhRN0xNSkzTVCXSye5Ecwcbj7-F6bcj",
+        "urlAssinatura":  "https://drive.google.com/uc?export=download\u0026id=1qAhRN0xNSkzTVCXSye5Ecwcbj7-F6bcj",
+        "urlFotos":  "https://drive.google.com/uc?export=download\u0026id=1S_aLdOBtzZ4o2wlqBjLvvcvlp5PpBMcZ, https://drive.google.com/uc?export=download\u0026id=1IrXDdBpMqLZz57df6XPKFuYHAO9RPg7k, https://drive.google.com/uc?export=download\u0026id=1oOalfWZbOlqBIVz1uZhubiqWsHtJGIaY, https://drive.google.com/uc?export=download\u0026id=1HWm-XToKpSw-jNe4q0T1v9mitjSLCGf9",
+        "fotosJson":  "[{\"url\":\"https://drive.google.com/uc?export=download\u0026id=1S_aLdOBtzZ4o2wlqBjLvvcvlp5PpBMcZ\",\"path\":\"https://drive.google.com/uc?export=download\u0026id=1S_aLdOBtzZ4o2wlqBjLvvcvlp5PpBMcZ\",\"comment\":\"Rack\"},{\"url\":\"https://drive.google.com/uc?export=download\u0026id=1IrXDdBpMqLZz57df6XPKFuYHAO9RPg7k\",\"path\":\"https://drive.google.com/uc?export=download\u0026id=1IrXDdBpMqLZz57df6XPKFuYHAO9RPg7k\",\"comment\":\"Passagem para a outra sala, onde estão os cabos\"},{\"url\":\"https://drive.google.com/uc?export=download\u0026id=1oOalfWZbOlqBIVz1uZhubiqWsHtJGIaY\",\"path\":\"https://drive.google.com/uc?export=download\u0026id=1oOalfWZbOlqBIVz1uZhubiqWsHtJGIaY\",\"comment\":\"Vista do laboratório\"},{\"url\":\"https://drive.google.com/uc?export=download\u0026id=1HWm-XToKpSw-jNe4q0T1v9mitjSLCGf9\",\"path\":\"https://drive.google.com/uc?export=download\u0026id=1HWm-XToKpSw-jNe4q0T1v9mitjSLCGf9\",\"comment\":\"Vista do laboratório\"}]",
+        "photos":  [
+                       "@{path=https://drive.google.com/uc?export=download\u0026id=1S_aLdOBtzZ4o2wlqBjLvvcvlp5PpBMcZ; url=https://drive.google.com/uc?export=download\u0026id=1S_aLdOBtzZ4o2wlqBjLvvcvlp5PpBMcZ; comment=Rack}",
+                       "@{path=https://drive.google.com/uc?export=download\u0026id=1IrXDdBpMqLZz57df6XPKFuYHAO9RPg7k; url=https://drive.google.com/uc?export=download\u0026id=1IrXDdBpMqLZz57df6XPKFuYHAO9RPg7k; comment=Passagem para a outra sala, onde estão os cabos}",
+                       "@{path=https://drive.google.com/uc?export=download\u0026id=1oOalfWZbOlqBIVz1uZhubiqWsHtJGIaY; url=https://drive.google.com/uc?export=download\u0026id=1oOalfWZbOlqBIVz1uZhubiqWsHtJGIaY; comment=Vista do laboratório}",
+                       "@{path=https://drive.google.com/uc?export=download\u0026id=1HWm-XToKpSw-jNe4q0T1v9mitjSLCGf9; url=https://drive.google.com/uc?export=download\u0026id=1HWm-XToKpSw-jNe4q0T1v9mitjSLCGf9; comment=Vista do laboratório}"
+                   ],
+        "updatedAt":  "2026-05-26T00:38:02.886Z"
+    },
+    {
+        "id":  "2026-05-25 23:04:38.969251",
+        "creator":  "Barclay de Medeiros Normando",
+        "schoolName":  "EEEF NOSSA SENHORA DO ROSARIO",
+        "visitDate":  "2026-05-25T03:00:00.000Z",
+        "isTechnicalAnalysis":  true,
+        "subjects":  [
+                         "Análise Técnica"
+                     ],
+        "technicians":  [
+                            "Barclay de Medeiros Normando"
+                        ],
+        "responsiblePerson":  "",
+        "observations":  "teste",
+        "reportNumber":  "REL-9761078969",
+        "gre":  "03ª GRE (Campina Grande)",
+        "schoolAddress":  "RUA NILO PECANHA, 250 PRATA. 58400-515 Campina Grande - PB.",
+        "schoolCity":  "Campina Grande",
+        "municipio":  "Campina Grande",
+        "schoolInep":  "25072161",
+        "inep":  "25072161",
+        "signatureUrl":  "https://drive.google.com/uc?export=download\u0026id=1_5vLGrwqwJ5G-rHmkhPk7nJ7jnfEBf-8",
+        "urlAssinatura":  "https://drive.google.com/uc?export=download\u0026id=1_5vLGrwqwJ5G-rHmkhPk7nJ7jnfEBf-8",
+        "urlFotos":  "",
+        "fotosJson":  "[]",
+        "photos":  [
+
+                   ],
+        "updatedAt":  "2026-05-26T02:05:08.208Z"
+    },
+    {
+        "id":  "2026-05-26 09:56:52.822221",
+        "creator":  "Barclay de Medeiros Normando",
+        "schoolName":  "ECI ALDO SATIRO XAVIER",
+        "visitDate":  "2026-05-26T03:00:00.000Z",
+        "isTechnicalAnalysis":  true,
+        "subjects":  [
+                         "Análise Técnica"
+                     ],
+        "technicians":  [
+                            "Jarley Soares da Costa",
+                            "Barclay de Medeiros Normando"
+                        ],
+        "responsiblePerson":  "",
+        "observations":  "teste",
+        "reportNumber":  "REL-9800212822",
+        "gre":  "06ª GRE (Patos)",
+        "schoolAddress":  "RUA GILVAN SOARES, SN SALAS CEDIDAS. CENTRO. 58730-000 Cacimba de Areia - PB.",
+        "schoolCity":  "Cacimba de Areia",
+        "municipio":  "Cacimba de Areia",
+        "schoolInep":  "25019813",
+        "inep":  "25019813",
+        "signatureUrl":  "https://drive.google.com/uc?export=download\u0026id=1cAGinsEvGl7R45v6JkaEIRLA6zonfPHZ",
+        "urlAssinatura":  "https://drive.google.com/uc?export=download\u0026id=1cAGinsEvGl7R45v6JkaEIRLA6zonfPHZ",
+        "urlFotos":  "https://drive.google.com/uc?export=download\u0026id=1Ww59uODgjZgLRXkswXjKPPFA1aDl99Zj",
+        "fotosJson":  "[{\"url\":\"https://drive.google.com/uc?export=download\u0026id=1Ww59uODgjZgLRXkswXjKPPFA1aDl99Zj\",\"path\":\"https://drive.google.com/uc?export=download\u0026id=1Ww59uODgjZgLRXkswXjKPPFA1aDl99Zj\",\"comment\":\"\"}]",
+        "photos":  [
+                       "@{path=https://drive.google.com/uc?export=download\u0026id=1Ww59uODgjZgLRXkswXjKPPFA1aDl99Zj; url=https://drive.google.com/uc?export=download\u0026id=1Ww59uODgjZgLRXkswXjKPPFA1aDl99Zj; comment=}"
+                   ],
+        "updatedAt":  "2026-05-26T12:57:09.350Z"
+    }
+]

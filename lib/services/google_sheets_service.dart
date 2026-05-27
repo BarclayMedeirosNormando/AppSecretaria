@@ -1,0 +1,1712 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint, debugPrintStack;
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/report_model.dart';
+import '../models/school_model.dart';
+import '../models/technician_model.dart';
+import '../utils/app_constants.dart';
+import '../utils/text_encoding.dart';
+import '../utils/json_utils.dart';
+import 'school_service.dart';
+
+class GoogleSheetsService {
+  // A URL do Apps Script gerada
+  static const String _scriptUrl = 'https://script.google.com/macros/s/AKfycbxw2FWbqnNvCdnMORY4BMg44mfplFi8YQ838GNhKFQUBMfsI3HMyISq742LxKoWqqp5/exec';
+  
+  // Chave para salvar os dados offline no SharedPreferences
+  static const String _offlineQueueKey = 'offline_reports_queue';
+  static const List<String> _legacyOfflineQueueKeys = [
+    'pending_sync',
+    'pending_reports',
+    'offline_reports',
+    'syncQueue',
+    'offlineQueue',
+    'offline_queue',
+    'sync_queue',
+    'pending_sync_queue',
+  ];
+  static const Map<String, String> _jsonHeaders = {
+    'Content-Type': 'application/json; charset=utf-8',
+  };
+
+  /// Resolve o município de um relatório garantindo que SchoolService esteja carregado.
+  /// Ordem: schoolCity → INEP no SchoolService → nome da escola no SchoolService → ''.
+  Future<String> _resolveReportMunicipio(ReportModel report) async {
+    // 1. Já tem cidade
+    final city = report.schoolCity?.trim();
+    if (city != null && city.isNotEmpty) return city;
+
+    // 2. Garante escolas carregadas
+    await SchoolService().loadSchoolsIfNeeded();
+
+    // 3. Por INEP
+    final cityByInep = GoogleSheetsService.findCityByInep(report.schoolInep);
+    if (cityByInep != null && cityByInep.isNotEmpty) return cityByInep;
+
+    // 4. Por nome da escola
+    final nameLower = _normalizeText(report.schoolName);
+    if (nameLower.isNotEmpty) {
+      for (final school in SchoolService().schools) {
+        if (_normalizeText(school.name) == nameLower) {
+          final c = school.city.trim();
+          if (c.isNotEmpty) return c;
+        }
+      }
+    }
+
+    return '';
+  }
+
+  static String _normalizeText(String? value) {
+    return (value ?? '').trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  /// Envia o relatório. Se estiver offline, salva na fila para sincronizar depois.
+  /// [isEdit] indica se é uma edição (true) ou criação nova (false).
+  Future<void> sendReport(ReportModel report, String loggedInUser, {bool isEdit = false}) async {
+    // Resolve o município mesmo que schoolCity esteja vazio
+    final municipio = await _resolveReportMunicipio(report);
+
+    // Monta o pacote de dados JSON
+    final Map<String, dynamic> data = {
+      'acao': 'adicionar',
+      'acao_tipo': isEdit ? 'Editar' : 'Criar', // para auditoria
+      'id': report.id,
+      'numero_relatorio': report.reportNumber,
+      'usuario_logado': loggedInUser,
+      'escola': report.schoolName,
+      'endereco_escola': report.schoolAddress ?? '',
+      'municipio': municipio,
+      'inep': report.schoolInep ?? '',
+      'data_visita': report.visitDate.toIso8601String(),
+      'tipo_relatorio': report.isTechnicalAnalysis ? 'Técnico' : 'Não-Técnico',
+      'motivos': report.subjects.join(', '),
+      'observacoes': report.observations ?? '',
+      'gre': report.gre ?? '',
+      'tecnicos': report.technicians.join(', '),
+      'responsavel': report.responsiblePerson ?? '',
+    };
+
+    // Se tiver assinatura, converte para Base64
+    if (report.signatureBytes != null) {
+      data['assinaturaBase64'] = base64Encode(report.signatureBytes!);
+      data['assinaturaNome'] = 'assinatura_${report.id}.png';
+    }
+
+    // Trata múltiplas fotos e funciona tanto no Web quanto no Celular!
+    final remotePhotos = <Map<String, String>>[];
+    List<Map<String, String>> fotosBase64Array = [];
+    if (report.photos.isNotEmpty) {
+      for (int i = 0; i < report.photos.length; i++) {
+        try {
+          final path = report.photos[i].path.trim();
+          if (path.startsWith('http://') || path.startsWith('https://')) {
+            remotePhotos.add({
+              'url': path,
+              'comment': report.photos[i].comment ?? '',
+            });
+            continue;
+          }
+
+          Uint8List bytes;
+          if (kIsWeb) {
+            // No navegador, a foto fica numa URL temporária "blob:"
+            final response = await http.get(Uri.parse(path));
+            bytes = response.bodyBytes;
+          } else {
+            // No celular/Windows, é um arquivo real
+            bytes = await File(path).readAsBytes();
+          }
+          fotosBase64Array.add({
+            'base64': base64Encode(bytes),
+            'nome': 'foto_${report.id}_$i.jpg',
+            'comentario': report.photos[i].comment ?? '',
+          });
+        } catch (e) {
+          debugPrint('Erro ao converter foto $i: $e');
+        }
+      }
+    }
+    data['fotosArray'] = fotosBase64Array;
+    if (remotePhotos.isNotEmpty) {
+      data['fotosJsonExistente'] = remotePhotos;
+      data['urlFotosExistente'] = remotePhotos.map((photo) => photo['url']).whereType<String>().join(', ');
+    }
+    if (report.signatureUrl != null && report.signatureUrl!.trim().isNotEmpty) {
+      data['urlAssinaturaExistente'] = report.signatureUrl!.trim();
+    }
+
+    // Diagnóstico obrigatório (Parte 2)
+    debugPrint('Sincronizando relatório ID: ${report.id}');
+    debugPrint('Número relatório: ${report.reportNumber}');
+    debugPrint('Escola: ${report.schoolName}');
+    debugPrint('Payload action: adicionar');
+    debugPrint('Payload municipio: $municipio');
+    debugPrint('Payload inep: ${report.schoolInep}');
+
+    try {
+      // Tenta enviar para a internet (com timeout de 60 segundos)
+      final response = await http.post(
+        Uri.parse(_scriptUrl),
+        headers: _jsonHeaders,
+        body: jsonEncode(data),
+      ).timeout(const Duration(seconds: 60));
+
+      if (response.statusCode == 200 || response.statusCode == 302) {
+        final decoded = _parseAndValidateResponse(response);
+        if (_isSuccess(decoded)) {
+
+
+          debugPrint('Relatório ${report.id} enviado com sucesso para a nuvem!');
+        } else {
+          final errMsg = decoded['message'] ?? 'Erro desconhecido no Apps Script';
+          throw Exception(errMsg);
+        }
+      } else {
+        throw Exception('Erro na API: status ${response.statusCode}');
+      }
+    } catch (e) {
+      // Se cair aqui, é porque falhou (Sem internet, timeout, etc)
+      debugPrint('Falha ao enviar relatório, mantendo offline: $e');
+      await _saveOffline(data);
+      
+      final errStr = e.toString();
+      if (errStr.contains('HTML') || errStr.contains('decodificada') || errStr.contains('JSON')) {
+        throw Exception('Falha ao enviar relatório. A API retornou resposta inválida. Verifique a implantação do Apps Script.');
+      }
+      rethrow; // Propaga para a UI tratar e exibir o SnackBar se necessário
+    }
+  }
+
+  /// Remove um relatório da planilha do Google Sheets.
+  /// Apenas ADM pode chamar esta função (controle feito na UI do Flutter).
+  Future<void> deleteReport(String reportId, String loggedInUser, ReportModel report) async {
+    final Map<String, dynamic> data = {
+      'acao': 'deletar_relatorio',
+      'id': reportId,
+      'usuario_logado': loggedInUser,
+      'numero_relatorio': report.reportNumber,
+      'escola': report.schoolName,
+    };
+    try {
+      final response = await http.post(
+        Uri.parse(_scriptUrl),
+        headers: _jsonHeaders,
+        body: jsonEncode(data),
+      ).timeout(const Duration(seconds: 30));
+      if (response.statusCode == 200 || response.statusCode == 302) {
+        final decoded = _parseAndValidateResponse(response);
+        if (_isSuccess(decoded)) {
+          debugPrint('Relatório $reportId excluído da nuvem com sucesso!');
+        } else {
+          final errMsg = decoded['message'] ?? 'Erro desconhecido no Apps Script';
+          throw Exception(errMsg);
+        }
+      } else {
+        throw Exception('Erro ao excluir da nuvem: status ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Erro ao excluir relatório da nuvem. Salvando ação offline. Erro: $e');
+      await _saveOffline(data);
+    }
+  }
+
+  /// Busca o histórico de alterações e exclusões (somente ADM).
+  Future<List<Map<String, dynamic>>> fetchHistory() async {
+    final Map<String, dynamic> data = {'acao': 'buscar_historico'};
+    try {
+      var request = http.Request('POST', Uri.parse(_scriptUrl));
+      request.headers.addAll(_jsonHeaders);
+      request.body = jsonEncode(data);
+      request.followRedirects = false;
+
+      var client = http.Client();
+      var streamedResponse = await client.send(request).timeout(const Duration(seconds: 40));
+      var response = await http.Response.fromStream(streamedResponse);
+
+      http.Response finalResponse = response;
+      if (response.statusCode == 302 || response.statusCode == 303) {
+        final location = response.headers['location'];
+        if (location != null) {
+          finalResponse = await http.get(Uri.parse(location)).timeout(const Duration(seconds: 40));
+        }
+      }
+
+      if (finalResponse.statusCode == 200) {
+        final decoded = _parseAndValidateResponse(finalResponse);
+        debugPrint('Resposta fetchHistory: $decoded');
+        if (_isSuccess(decoded)) {
+          final rawData = decoded['data'];
+          final history = <Map<String, dynamic>>[];
+
+          if (rawData is List) {
+            for (final item in rawData) {
+              if (item is Map) {
+                // Converter Map<dynamic, dynamic> para Map<String, dynamic> com segurança total
+                final safeMap = <String, dynamic>{};
+                item.forEach((key, value) {
+                  safeMap[key.toString()] = value;
+                });
+
+                // Normalizar fotos/técnicos/motivos usando JsonUtils e sem cast direto
+                safeMap['motivos'] = JsonUtils.asString(safeMap['motivos'] ?? safeMap['subjects'] ?? safeMap['Motivos / Assuntos']);
+                safeMap['tecnicos'] = JsonUtils.asString(safeMap['tecnicos'] ?? safeMap['technicians'] ?? safeMap['Técnicos Presentes'] ?? safeMap['Tecnicos Presentes']);
+                
+                // Normalização para fotos/assinaturas
+                safeMap['fotosJson'] = JsonUtils.asNullableString(safeMap['fotosJson'] ?? safeMap['fotos_json']);
+                safeMap['urlFotos'] = JsonUtils.asNullableString(safeMap['urlFotos'] ?? safeMap['photos'] ?? safeMap['url_fotos'] ?? safeMap['Link Foto']);
+                safeMap['urlAssinatura'] = JsonUtils.asNullableString(safeMap['urlAssinatura'] ?? safeMap['signatureUrl'] ?? safeMap['Link Assinatura']);
+
+                history.add(safeMap);
+              }
+            }
+          }
+          debugPrint('Histórico recebido e convertido com segurança: ${history.length}');
+          return history;
+        }
+        throw Exception(decoded['message']?.toString() ?? 'Erro desconhecido ao buscar histórico');
+      }
+      throw Exception('Erro HTTP ${finalResponse.statusCode} ao buscar histórico');
+    } catch (e) {
+      debugPrint('Erro ao buscar histórico: $e');
+      rethrow;
+    }
+  }
+
+
+  /// Salva ou atualiza os dados na memória do celular quando está offline,
+  /// aplicando regras de deduplicação e normalização inteligentes.
+  Future<void> _saveOffline(Map<String, dynamic> data) async {
+    final List<Map<String, dynamic>> parsedQueue = await _getOfflineQueue();
+    
+    final String targetId = data['id']?.toString() ?? '';
+    if (targetId.isEmpty) {
+      debugPrint('Tentativa de salvar operação offline sem ID válido. Ignorado.');
+      return;
+    }
+
+    final String targetAction = data['acao']?.toString() ?? ''; // 'adicionar' ou 'deletar_relatorio'
+    final String targetActionType = data['acao_tipo']?.toString() ?? ''; // 'Criar' ou 'Editar'
+
+    bool handled = false;
+
+    if (targetAction == 'deletar_relatorio') {
+      // Regra 1: Se for deleção:
+      // - Se existia uma criação pendente ('adicionar' e 'Criar') para o mesmo ID,
+      //   o relatório nunca foi para a nuvem. Então a gente simplesmente remove a criação
+      //   e ignora a deleção (não manda nada para a fila).
+      // - Se existia uma edição pendente, removemos a edição e colocamos apenas a deleção.
+      final hasPendingCreate = parsedQueue.any((item) => 
+        item['id']?.toString() == targetId && 
+        item['acao'] == 'adicionar' && 
+        item['acao_tipo'] == 'Criar'
+      );
+
+      if (hasPendingCreate) {
+        parsedQueue.removeWhere((item) => item['id']?.toString() == targetId);
+        handled = true;
+        debugPrint('Deduplicação offline: Relatório $targetId deletado localmente antes de subir. Fila limpa para este ID.');
+      } else {
+        parsedQueue.removeWhere((item) => item['id']?.toString() == targetId);
+        parsedQueue.add(data);
+        handled = true;
+        debugPrint('Deduplicação offline: Relatório $targetId marcado para deleção na nuvem. Fila limpa de updates anteriores.');
+      }
+    } else if (targetAction == 'adicionar') {
+      // Regra 2: Se for adicionar (Criar ou Editar):
+      // - Se existia uma criação pendente ('adicionar' e 'Criar') para o mesmo ID:
+      //   mantemos como 'Criar' mas atualizamos todo o payload com os novos dados.
+      // - Se existia um update pendente ('adicionar' e 'Editar') para o mesmo ID:
+      //   atualizamos o payload com os novos dados e mantemos como 'Editar'.
+      for (int i = 0; i < parsedQueue.length; i++) {
+        final item = parsedQueue[i];
+        if (item['id']?.toString() == targetId && item['acao'] == 'adicionar') {
+          final String originalActionType = item['acao_tipo']?.toString() ?? 'Criar';
+          parsedQueue[i] = Map<String, dynamic>.from(data);
+          parsedQueue[i]['acao_tipo'] = originalActionType;
+          handled = true;
+          debugPrint('Deduplicação offline: Payload atualizado da operação "$originalActionType" pendente do relatório $targetId.');
+          break;
+        }
+      }
+    }
+
+    if (!handled) {
+      parsedQueue.add(data);
+      debugPrint('Deduplicação offline: Nova operação "${targetAction == 'adicionar' ? targetActionType : 'Deletar'}" adicionada para o relatório $targetId.');
+    }
+
+    await _saveOfflineQueue(parsedQueue);
+    debugPrint('Relatório salvo na fila offline. Total na fila: ${parsedQueue.length}');
+  }
+
+  /// Lê a fila offline de forma segura do SharedPreferences.
+  /// Se a chave contiver um tipo incompatível (ex: List salvo por setStringList
+  /// em versão antiga), captura o TypeError, limpa a chave corrompida e
+  /// retorna lista vazia — sem derrubar a app nem apagar local_reports.
+  Future<List<Map<String, dynamic>>> _getOfflineQueue() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    try {
+      // Primeiro tenta ler como String JSON (formato atual correto)
+      final rawString = prefs.getString(_offlineQueueKey);
+      debugPrint('Offline queue raw length: ${rawString?.length}');
+
+      if (rawString == null || rawString.trim().isEmpty) {
+        // Sem dado na chave principal — verifica chaves legadas
+        return await _migrateLegacyQueue(prefs);
+      }
+
+      final decoded = jsonDecode(rawString);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+
+      // JSON existe mas não é lista — corrompido
+      debugPrint('Fila offline não é uma lista JSON. Limpando.');
+      await prefs.remove(_offlineQueueKey);
+      return [];
+    } catch (e, stack) {
+      // Captura TypeError de cast (List<dynamic> as String?) e qualquer outro erro
+      debugPrint('Fila offline corrompida ou tipo incompatível ($_offlineQueueKey). Limpando. Erro: $e');
+      debugPrintStack(stackTrace: stack);
+      try {
+        await prefs.remove(_offlineQueueKey);
+      } catch (_) {}
+      await _cleanupLegacyKeys(prefs);
+      return [];
+    }
+  }
+
+  /// Tenta migrar dados de chaves legadas (StringList ou String antiga) para o
+  /// formato atual (String JSON em _offlineQueueKey). Chamado apenas quando a
+  /// chave principal está vazia.
+  Future<List<Map<String, dynamic>>> _migrateLegacyQueue(
+      SharedPreferences prefs) async {
+    for (final key in _legacyOfflineQueueKeys) {
+      if (!prefs.containsKey(key)) continue;
+      try {
+        // Tenta como String JSON
+        final asStr = prefs.getString(key);
+        if (asStr != null && asStr.trim().isNotEmpty) {
+          final decoded = jsonDecode(asStr);
+          if (decoded is List) {
+            final queue = decoded
+                .whereType<Map>()
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList();
+            await prefs.remove(key);
+            if (queue.isNotEmpty) await _saveOfflineQueue(queue);
+            debugPrint('Migrado ${queue.length} item(s) da chave legada "$key".');
+            return queue;
+          }
+        }
+      } catch (_) {}
+      try {
+        // Tenta como StringList
+        final asList = prefs.getStringList(key);
+        if (asList != null && asList.isNotEmpty) {
+          final queue = <Map<String, dynamic>>[];
+          for (final itemStr in asList) {
+            try {
+              final decoded = jsonDecode(itemStr);
+              if (decoded is Map) queue.add(Map<String, dynamic>.from(decoded));
+            } catch (_) {}
+          }
+          await prefs.remove(key);
+          if (queue.isNotEmpty) await _saveOfflineQueue(queue);
+          debugPrint('Migrado ${queue.length} item(s) da StringList legada "$key".');
+          return queue;
+        }
+      } catch (_) {}
+      // Chave existe mas não conseguimos ler — remover
+      try { await prefs.remove(key); } catch (_) {}
+    }
+    return [];
+  }
+
+  /// Remove chaves legadas conhecidas (exceto a chave atual) de forma segura.
+  Future<void> _cleanupLegacyKeys(SharedPreferences prefs) async {
+    for (final key in _legacyOfflineQueueKeys) {
+      try {
+        if (prefs.containsKey(key)) await prefs.remove(key);
+      } catch (_) {}
+    }
+  }
+
+  /// Salva a fila offline SEMPRE como String JSON usando setString.
+  /// Nunca usa setStringList para evitar conflitos de tipo no SharedPreferences.
+  Future<void> _saveOfflineQueue(List<Map<String, dynamic>> queue) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (queue.isEmpty) {
+      await prefs.remove(_offlineQueueKey);
+      debugPrint('Fila offline limpa e chave removida.');
+    } else {
+      // setString garante que getString nunca lançará TypeError
+      await prefs.setString(_offlineQueueKey, jsonEncode(queue));
+      debugPrint('Fila offline salva. Total de itens: ${queue.length}');
+    }
+  }
+
+  /// Remove APENAS a fila offline corrompida/antiga, sem tocar em local_reports
+  /// ou qualquer outro dado do app. Útil para recuperação manual.
+  Future<void> clearOfflineQueueOnly() async {
+    final prefs = await SharedPreferences.getInstance();
+    try { await prefs.remove(_offlineQueueKey); } catch (_) {}
+    await _cleanupLegacyKeys(prefs);
+    debugPrint('Fila offline limpa manualmente via clearOfflineQueueOnly.');
+  }
+
+  int _getKeyCount(SharedPreferences prefs, String key) {
+    if (!prefs.containsKey(key)) return 0;
+    try {
+      final val = prefs.get(key);
+      if (val is List) return val.length;
+      if (val is String) {
+        if (val.trim().isEmpty) return 0;
+        final decoded = jsonDecode(val);
+        if (decoded is List) return decoded.length;
+        if (decoded is Map) return 1;
+      }
+    } catch (_) {}
+    return 0;
+  }
+
+  bool _isValidPendingItem(Map<String, dynamic>? item) {
+    if (item == null || item.isEmpty) return false;
+    
+    final action = (item['acao'] ?? item['action'] ?? '').toString().trim();
+    if (action.isEmpty) return false;
+    
+    final id = (item['id'] ?? item['reportId'] ?? item['report_id'] ?? '').toString().trim();
+    if (id.isEmpty) return false;
+    
+    final status = (item['status'] ?? item['syncStatus'] ?? '').toString().toLowerCase().trim();
+    if (status == 'synced' || status == 'success') return false;
+    
+    if (item['alreadySynced'] == true) return false;
+    
+    return true;
+  }
+
+  Future<int> cleanupAllOfflineQueuesAndReturnCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Obter IDs dos relatórios locais para verificação
+    final String? reportsJson = prefs.getString('local_reports');
+    final Set<String> localReportIds = {};
+    if (reportsJson != null) {
+      try {
+        final List<dynamic> decodedList = jsonDecode(reportsJson);
+        for (final item in decodedList) {
+          if (item is Map && item['id'] != null) {
+            localReportIds.add(item['id'].toString().trim());
+          }
+        }
+      } catch (_) {}
+    }
+    
+    final List<Map<String, dynamic>> consolidatedQueue = [];
+    
+    // Lista de todas as chaves de filas a inspecionar
+    final List<String> allKeysToClean = [
+      _offlineQueueKey,
+      'pending_schools',
+      'pending_technicians',
+      'offline_schools',
+      'offline_technicians',
+      'pending_deletes',
+      'deleted_reports',
+      'unsynced_reports',
+      'pending_operations',
+      ..._legacyOfflineQueueKeys,
+    ];
+    
+    for (final key in allKeysToClean) {
+      if (!prefs.containsKey(key)) continue;
+      
+      try {
+        final value = prefs.get(key);
+        List<dynamic> rawItems = [];
+        
+        if (value is List) {
+          rawItems = value;
+        } else if (value is String) {
+          if (value.trim().isNotEmpty) {
+            final decoded = jsonDecode(value);
+            if (decoded is List) {
+              rawItems = decoded;
+            } else if (decoded is Map) {
+              rawItems = [decoded];
+            }
+          }
+        }
+        
+        final List<Map<String, dynamic>> validItems = [];
+        for (var item in rawItems) {
+          if (item is! Map) continue;
+          final mapItem = Map<String, dynamic>.from(item);
+          
+          if (!_isValidPendingItem(mapItem)) {
+            debugPrint('cleanupAllOfflineQueuesAndReturnCount: Removendo item inválido/sincronizado na chave $key: $item');
+            continue;
+          }
+          
+          final action = (mapItem['acao'] ?? mapItem['action'] ?? '').toString().trim();
+          final canonicalAction = action == 'sendReport' || action == 'updateReport'
+              ? 'adicionar'
+              : action == 'deleteReport' || action == 'deletar_relatorio'
+                  ? 'deletar_relatorio'
+                  : action;
+                  
+          final id = (mapItem['id'] ?? mapItem['reportId'] ?? mapItem['report_id'] ?? '').toString().trim();
+          if (canonicalAction != 'deletar_relatorio' && !localReportIds.contains(id)) {
+            debugPrint('cleanupAllOfflineQueuesAndReturnCount: Removendo item órfão sem relatório local $id na chave $key');
+            continue;
+          }
+          
+          validItems.add(mapItem);
+        }
+        
+        if (validItems.isEmpty) {
+          debugPrint('cleanupAllOfflineQueuesAndReturnCount: Removendo chave vazia/inválida $key');
+          await prefs.remove(key);
+        } else {
+          if (key == _offlineQueueKey) {
+            consolidatedQueue.addAll(validItems);
+          } else {
+            debugPrint('cleanupAllOfflineQueuesAndReturnCount: Migrando ${validItems.length} item(s) de $key para a fila principal');
+            consolidatedQueue.addAll(validItems);
+            await prefs.remove(key);
+          }
+        }
+      } catch (e) {
+        debugPrint('cleanupAllOfflineQueuesAndReturnCount: Erro ao limpar a chave $key: $e. Removendo chave.');
+        try {
+          await prefs.remove(key);
+        } catch (_) {}
+      }
+    }
+    
+    final List<Map<String, dynamic>> normalizedQueue = _normalizeConsolidatedQueue(consolidatedQueue, localReportIds);
+    await _saveOfflineQueue(normalizedQueue);
+    
+    return normalizedQueue.length;
+  }
+
+  List<Map<String, dynamic>> _normalizeConsolidatedQueue(List<Map<String, dynamic>> queue, Set<String> localReportIds) {
+    List<Map<String, dynamic>> parsedQueue = [];
+    for (var item in queue) {
+      final action = (item['acao'] ?? item['action'] ?? '').toString().trim();
+      if (action.isEmpty) continue;
+
+      final id = (item['id'] ?? item['reportId'] ?? item['report_id'] ?? '').toString().trim();
+      if (id.isEmpty) continue;
+
+      final canonicalAction = action == 'sendReport' || action == 'updateReport'
+          ? 'adicionar'
+          : action == 'deleteReport' || action == 'deletar_relatorio'
+              ? 'deletar_relatorio'
+              : action;
+
+      item['acao'] = canonicalAction;
+      item['id'] = id;
+      if (canonicalAction == 'adicionar' &&
+          (item['acao_tipo'] == null || item['acao_tipo'].toString().trim().isEmpty)) {
+        item['acao_tipo'] = action == 'sendReport' ? 'Criar' : 'Editar';
+      }
+      parsedQueue.add(item);
+    }
+
+    final Map<String, List<Map<String, dynamic>>> opsById = {};
+    for (final item in parsedQueue) {
+      final id = item['id'].toString();
+      opsById.putIfAbsent(id, () => []).add(item);
+    }
+
+    final List<Map<String, dynamic>> normalizedList = [];
+
+    opsById.forEach((id, ops) {
+      if (ops.isEmpty) return;
+      if (ops.length == 1) {
+        normalizedList.add(ops.first);
+        return;
+      }
+
+      Map<String, dynamic>? currentOp;
+      for (final nextOp in ops) {
+        if (currentOp == null) {
+          currentOp = nextOp;
+          continue;
+        }
+
+        final currAcao = currentOp['acao']?.toString();
+        final currAcaoTipo = currentOp['acao_tipo']?.toString();
+        final nextAcao = nextOp['acao']?.toString();
+        final nextAcaoTipo = nextOp['acao_tipo']?.toString();
+
+        if (currAcao == 'adicionar' && currAcaoTipo == 'Criar') {
+          if (nextAcao == 'adicionar' && nextAcaoTipo == 'Editar') {
+            currentOp = Map<String, dynamic>.from(nextOp);
+            currentOp['acao_tipo'] = 'Criar';
+          } else if (nextAcao == 'deletar_relatorio') {
+            currentOp = null; 
+          } else {
+            currentOp = nextOp;
+          }
+        } else if (currAcao == 'adicionar' && currAcaoTipo == 'Editar') {
+          if (nextAcao == 'adicionar' && nextAcaoTipo == 'Editar') {
+            currentOp = nextOp;
+          } else if (nextAcao == 'deletar_relatorio') {
+            currentOp = nextOp;
+          } else {
+            currentOp = nextOp;
+          }
+        } else if (currAcao == 'deletar_relatorio') {
+          if (nextAcao == 'adicionar' && nextAcaoTipo == 'Criar') {
+            currentOp = nextOp;
+          } else if (nextAcao == 'adicionar' && nextAcaoTipo == 'Editar') {
+            currentOp = nextOp;
+          } else {
+            currentOp = nextOp;
+          }
+        } else {
+          currentOp = nextOp;
+        }
+      }
+
+      if (currentOp != null) {
+        normalizedList.add(currentOp);
+      }
+    });
+
+    return normalizedList;
+  }
+
+  /// Normaliza a fila offline conforme as regras de negócio inteligentes do aplicativo
+  Future<List<Map<String, dynamic>>> normalizeOfflineQueue() async {
+    final List<Map<String, dynamic>> rawQueue = await _getOfflineQueue();
+    debugPrint('Pendências offline antes da normalização: ${rawQueue.length}');
+    
+    // Obter IDs dos relatórios locais para verificação
+    final prefs = await SharedPreferences.getInstance();
+    final String? reportsJson = prefs.getString('local_reports');
+    final Set<String> localReportIds = {};
+    if (reportsJson != null) {
+      try {
+        final List<dynamic> decodedList = jsonDecode(reportsJson);
+        for (final item in decodedList) {
+          if (item is Map && item['id'] != null) {
+            localReportIds.add(item['id'].toString().trim());
+          }
+        }
+      } catch (_) {}
+    }
+
+    List<Map<String, dynamic>> parsedQueue = [];
+    for (final mapItem in rawQueue) {
+      
+      if (!_isValidPendingItem(mapItem)) {
+        debugPrint('normalizeOfflineQueue: Removendo item inválido/sincronizado: $mapItem');
+        continue;
+      }
+
+      final action = (mapItem['acao'] ?? mapItem['action'] ?? '').toString().trim();
+      if (action.isEmpty) continue;
+
+      final id = (mapItem['id'] ?? mapItem['reportId'] ?? mapItem['report_id'] ?? '').toString().trim();
+      if (id.isEmpty) continue;
+
+      final canonicalAction = action == 'sendReport' || action == 'updateReport'
+          ? 'adicionar'
+          : action == 'deleteReport' || action == 'deletar_relatorio'
+              ? 'deletar_relatorio'
+              : action;
+
+      // Regra: remover item cujo relatório não existe e action não é delete
+      if (canonicalAction != 'deletar_relatorio' && !localReportIds.contains(id)) {
+        debugPrint('Normalização: Removendo operação offline para relatório $id porque ele não existe mais localmente.');
+        continue;
+      }
+
+      mapItem['acao'] = canonicalAction;
+      mapItem['id'] = id;
+      if (canonicalAction == 'adicionar' &&
+          (mapItem['acao_tipo'] == null || mapItem['acao_tipo'].toString().trim().isEmpty)) {
+        mapItem['acao_tipo'] = action == 'sendReport' ? 'Criar' : 'Editar';
+      }
+      parsedQueue.add(mapItem);
+    }
+
+    // Mapear operações por ID para condensar de acordo com as regras solicitadas
+    final Map<String, List<Map<String, dynamic>>> opsById = {};
+    for (final item in parsedQueue) {
+      final id = item['id'].toString();
+      opsById.putIfAbsent(id, () => []).add(item);
+    }
+
+    final List<Map<String, dynamic>> normalizedList = [];
+
+    opsById.forEach((id, ops) {
+      if (ops.isEmpty) return;
+      if (ops.length == 1) {
+        normalizedList.add(ops.first);
+        return;
+      }
+
+      Map<String, dynamic>? currentOp;
+      for (final nextOp in ops) {
+        if (currentOp == null) {
+          currentOp = nextOp;
+          continue;
+        }
+
+        final currAcao = currentOp['acao']?.toString();
+        final currAcaoTipo = currentOp['acao_tipo']?.toString();
+        final nextAcao = nextOp['acao']?.toString();
+        final nextAcaoTipo = nextOp['acao_tipo']?.toString();
+
+        if (currAcao == 'adicionar' && currAcaoTipo == 'Criar') {
+          if (nextAcao == 'adicionar' && nextAcaoTipo == 'Editar') {
+            // create + update = create com dados mais recentes
+            currentOp = Map<String, dynamic>.from(nextOp);
+            currentOp['acao_tipo'] = 'Criar';
+          } else if (nextAcao == 'deletar_relatorio') {
+            // create + delete antes de subir = remover tudo
+            currentOp = null; 
+          } else {
+            currentOp = nextOp;
+          }
+        } else if (currAcao == 'adicionar' && currAcaoTipo == 'Editar') {
+          if (nextAcao == 'adicionar' && nextAcaoTipo == 'Editar') {
+            // update + update = último update
+            currentOp = nextOp;
+          } else if (nextAcao == 'deletar_relatorio') {
+            // update + delete = delete
+            currentOp = nextOp;
+          } else {
+            currentOp = nextOp;
+          }
+        } else if (currAcao == 'deletar_relatorio') {
+          if (nextAcao == 'adicionar' && nextAcaoTipo == 'Criar') {
+            // delete + create = manter a última válida
+            currentOp = nextOp;
+          } else if (nextAcao == 'adicionar' && nextAcaoTipo == 'Editar') {
+            currentOp = nextOp;
+          } else {
+            currentOp = nextOp;
+          }
+        } else {
+          currentOp = nextOp;
+        }
+      }
+
+      if (currentOp != null) {
+        normalizedList.add(currentOp);
+      }
+    });
+
+    await _saveOfflineQueue(normalizedList);
+    debugPrint('Offline queue normalized length: ${normalizedList.length}');
+    return normalizedList;
+  }
+
+  /// Tenta enviar uma operação individual para o Apps Script
+  Future<void> _sendOperation(Map<String, dynamic> op) async {
+    final decoded = await _postJson(op, timeout: const Duration(seconds: 40));
+    if (!_isSuccess(decoded)) {
+      final msg = decoded['message']?.toString() ?? '';
+      final action = op['acao']?.toString() ?? '';
+      
+      // Se for deleção e o relatório já não existe no Sheets, consideramos sincronizado com sucesso!
+      if (action == 'deletar_relatorio' && 
+          (msg.toLowerCase().contains('não encontrado') || msg.toLowerCase().contains('nao encontrado'))) {
+        debugPrint('Deleção offline: Relatório já não existe no Sheets. Tratando como sucesso.');
+        return;
+      }
+      
+      throw Exception(msg.isNotEmpty ? msg : 'Erro desconhecido no Apps Script');
+    }
+  }
+
+  /// Sincroniza a fila offline enviando item a item
+  Future<void> syncOfflineData() async {
+    final queue = await normalizeOfflineQueue();
+
+    if (queue.isEmpty) {
+      debugPrint('Nenhum relatório pendente de sincronização.');
+      return;
+    }
+
+    debugPrint('Tentando sincronizar ${queue.length} relatórios offline...');
+    final remaining = <Map<String, dynamic>>[];
+
+    for (final op in queue) {
+      final id = op['id']?.toString() ?? '';
+      final action = op['acao']?.toString() ?? '';
+      final type = op['acao_tipo']?.toString() ?? '';
+      debugPrint('Syncing op: Action=$action, Type=$type, ID=$id');
+
+      try {
+        await _sendOperation(op);
+        debugPrint('Op $id sincronizada com sucesso!');
+      } catch (e) {
+        debugPrint('Falha ao sincronizar op $id: $e');
+        remaining.add(op);
+      }
+    }
+
+    await _saveOfflineQueue(remaining);
+    debugPrint('Sync remaining length: ${remaining.length}');
+    debugPrint('Sincronização offline concluída. Pendências restantes: ${remaining.length}');
+  }
+
+  /// Limpa chaves legadas e antigas do SharedPreferences (método público mantido
+  /// por compatibilidade — delega ao helper privado).
+  Future<void> cleanupLegacyOfflineQueueKeys() async {
+    final prefs = await SharedPreferences.getInstance();
+    await _cleanupLegacyKeys(prefs);
+  }
+
+  Future<Map<String, dynamic>> _postJson(
+    Map<String, dynamic> data, {
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
+    var request = http.Request('POST', Uri.parse(_scriptUrl));
+    request.headers.addAll(_jsonHeaders);
+    request.body = jsonEncode(data);
+    request.followRedirects = false;
+
+    final client = http.Client();
+    try {
+      var streamedResponse = await client.send(request).timeout(timeout);
+      var response = await http.Response.fromStream(streamedResponse);
+      http.Response finalResponse = response;
+
+      if (response.statusCode == 302 || response.statusCode == 303) {
+        final location = response.headers['location'];
+        if (location != null) {
+          finalResponse = await http.get(Uri.parse(location)).timeout(timeout);
+        }
+      }
+
+      if (finalResponse.statusCode == 200 || finalResponse.statusCode == 302) {
+        return _parseAndValidateResponse(finalResponse);
+      }
+      throw Exception('Erro HTTP ${finalResponse.statusCode}');
+    } finally {
+      client.close();
+    }
+  }
+
+  bool _isSuccess(Map<String, dynamic> decoded) {
+    return decoded['status']?.toString().toLowerCase() == 'success' ||
+        decoded['success'] == true;
+  }
+
+  List<Map<String, dynamic>> _readMapList(dynamic rawData, String context) {
+    final list = <Map<String, dynamic>>[];
+    if (rawData == null) return list;
+    if (rawData is! List) {
+      throw Exception('Apps Script retornou data invalido em $context');
+    }
+
+    for (final item in rawData) {
+      if (item is Map) {
+        list.add(Map<String, dynamic>.from(item));
+      }
+    }
+    return list;
+  }
+
+  /// Retorna o número de itens na fila offline aguardando sincronização.
+  /// Nunca lança exceção: se a fila estiver corrompida, retorna 0.
+  Future<int> getPendingSyncCount() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      final reportsCount = _getKeyCount(prefs, _offlineQueueKey);
+      
+      int schoolsCount = _getKeyCount(prefs, 'pending_schools') + _getKeyCount(prefs, 'offline_schools');
+      int techniciansCount = _getKeyCount(prefs, 'pending_technicians') + _getKeyCount(prefs, 'offline_technicians');
+      
+      int legacyCount = 0;
+      for (final key in _legacyOfflineQueueKeys) {
+        legacyCount += _getKeyCount(prefs, key);
+      }
+      
+      final queue = await normalizeOfflineQueue();
+      final total = queue.length;
+      
+      debugPrint('getPendingSyncCount reportsQueue = $reportsCount');
+      debugPrint('getPendingSyncCount schoolsQueue = $schoolsCount');
+      debugPrint('getPendingSyncCount techniciansQueue = $techniciansCount');
+      debugPrint('getPendingSyncCount legacyQueue = $legacyCount');
+      debugPrint('getPendingSyncCount total = $total');
+      
+      return total;
+    } catch (e) {
+      debugPrint('Erro ao contar pendências offline (fila inválida): $e');
+      return 0;
+    }
+  }
+
+  /// Retorna os IDs dos relatórios pendentes de criação
+  Future<Set<String>> getPendingCreateIds() async {
+    final queue = await normalizeOfflineQueue();
+    Set<String> ids = {};
+    for (final item in queue) {
+      try {
+        if (item['acao'] == 'adicionar' && item['acao_tipo'] == 'Criar') {
+          final id = item['id']?.toString();
+          if (id != null && id.isNotEmpty) {
+            ids.add(id);
+          }
+        }
+      } catch (e) {
+        debugPrint('Erro ao parsear item da fila offline: $e');
+      }
+    }
+    return ids;
+  }
+
+  /// Retorna os IDs dos relatórios pendentes de edição/atualização
+  Future<Set<String>> getPendingUpdateIds() async {
+    final queue = await normalizeOfflineQueue();
+    Set<String> ids = {};
+    for (final item in queue) {
+      try {
+        if (item['acao'] == 'adicionar' && item['acao_tipo'] == 'Editar') {
+          final id = item['id']?.toString();
+          if (id != null && id.isNotEmpty) {
+            ids.add(id);
+          }
+        }
+      } catch (e) {
+        debugPrint('Erro ao parsear item da fila offline: $e');
+      }
+    }
+    return ids;
+  }
+
+  /// Retorna os IDs dos relatórios pendentes de exclusão
+  Future<Set<String>> getPendingDeleteIds() async {
+    final queue = await normalizeOfflineQueue();
+    Set<String> ids = {};
+    for (final item in queue) {
+      try {
+        if (item['acao'] == 'deletar_relatorio') {
+          final id = item['id']?.toString();
+          if (id != null && id.isNotEmpty) {
+            ids.add(id);
+          }
+        }
+      } catch (e) {
+        debugPrint('Erro ao parsear item da fila offline: $e');
+      }
+    }
+    return ids;
+  }
+
+
+  /// Retorna os relatórios locais que possuem pendências de criação ou edição
+  Future<List<ReportModel>> getPendingCreateOrUpdateReports() async {
+    final createIds = await getPendingCreateIds();
+    final updateIds = await getPendingUpdateIds();
+    final pendingIds = {...createIds, ...updateIds};
+    if (pendingIds.isEmpty) return [];
+
+    final prefs = await SharedPreferences.getInstance();
+    final reportsById = <String, ReportModel>{};
+    try {
+      final String? reportsJson = prefs.getString('local_reports');
+      if (reportsJson != null) {
+        final List<dynamic> decodedList = jsonDecode(reportsJson);
+        for (var item in decodedList) {
+          try {
+            final report = ReportModel.fromJson(Map<String, dynamic>.from(item));
+            if (pendingIds.contains(report.id)) {
+              reportsById[report.id] = report;
+            }
+          } catch (e) {
+            debugPrint('Erro ao parsear relatório local: $e');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Erro ao ler local_reports: $e');
+    }
+
+    final queue = await normalizeOfflineQueue();
+    for (final payload in queue) {
+      try {
+        final id = payload['id']?.toString() ?? '';
+        if (!pendingIds.contains(id) || reportsById.containsKey(id)) continue;
+
+        final report = _reportFromOfflinePayload(
+          payload,
+          syncStatus: createIds.contains(id) ? 'pending_create' : 'pending_update',
+        );
+        if (report != null) {
+          reportsById[id] = report;
+        }
+      } catch (e) {
+        debugPrint('Erro ao reconstruir relatÃ³rio pendente da fila: $e');
+      }
+    }
+
+    return reportsById.values.toList();
+  }
+
+  /// Retorna a lista de relatórios locais cujos IDs estão na fila de sincronização pendente
+  Future<List<ReportModel>> getPendingOfflineReports() async {
+    final prefs = await SharedPreferences.getInstance();
+    final queue = await normalizeOfflineQueue();
+    Set<String> pendingIds = {};
+    for (final item in queue) {
+      try {
+        if (item['acao'] == 'adicionar') {
+          final id = item['id']?.toString();
+          if (id != null && id.isNotEmpty) {
+            pendingIds.add(id);
+          }
+        }
+      } catch (e) {
+        debugPrint('Erro ao parsear item da fila offline: $e');
+      }
+    }
+
+    if (pendingIds.isEmpty) return [];
+
+    List<ReportModel> localReports = [];
+    try {
+      final String? reportsJson = prefs.getString('local_reports');
+      if (reportsJson != null) {
+        final List<dynamic> decodedList = jsonDecode(reportsJson);
+        for (var item in decodedList) {
+          try {
+            if (item is! Map) continue;
+            localReports.add(ReportModel.fromJson(Map<String, dynamic>.from(item)));
+          } catch (e) {
+            debugPrint('Erro ao parsear relatório local: $e');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Erro ao ler local_reports: $e');
+    }
+
+    return localReports.where((r) => pendingIds.contains(r.id)).toList();
+  }
+
+  ReportModel? _reportFromOfflinePayload(
+    Map<String, dynamic> payload, {
+    required String syncStatus,
+  }) {
+    final id = payload['id']?.toString().trim() ?? '';
+    if (id.isEmpty) return null;
+
+    final fotosArray = payload['fotosArray'];
+    final photos = <PhotoItem>[];
+    if (fotosArray is List) {
+      for (final item in fotosArray) {
+        if (item is! Map) continue;
+        final map = Map<String, dynamic>.from(item);
+        final base64 = map['base64']?.toString();
+        if (base64 == null || base64.isEmpty) continue;
+        photos.add(PhotoItem(
+          path: base64,
+          comment: map['comentario']?.toString(),
+        ));
+      }
+    }
+
+    // Normalização rigorosa conforme Regra 5:
+    final normalizedSubjects = JsonUtils.asStringList(payload['subjects'] ?? payload['motivos']);
+    final normalizedTechnicians = JsonUtils.asStringList(payload['technicians'] ?? payload['tecnicos']);
+    
+    final normalizedUrlFotos = JsonUtils.asNullableString(payload['urlFotos'] ?? payload['Link Foto']);
+    final normalizedFotosJson = JsonUtils.asNullableString(payload['fotosJson'] ?? payload['fotos_json']);
+    final normalizedSignatureUrl = JsonUtils.asNullableString(payload['signatureUrl'] ?? payload['urlAssinatura']);
+
+    return ReportModel.fromJson({
+      'id': id,
+      'reportNumber': payload['numero_relatorio'],
+      'creator': payload['usuario_logado'],
+      'schoolName': payload['escola'],
+      'schoolAddress': payload['endereco_escola'],
+      'schoolCity': payload['municipio'],
+      'schoolInep': payload['inep'],
+      'visitDate': payload['data_visita'],
+      'tipo': payload['tipo_relatorio'],
+      'subjects': normalizedSubjects,
+      'motivos': normalizedSubjects,
+      'observations': payload['observacoes'],
+      'gre': payload['gre'],
+      'technicians': normalizedTechnicians,
+      'tecnicos': normalizedTechnicians,
+      'responsiblePerson': payload['responsavel'],
+      'signatureBytes': payload['assinaturaBase64'],
+      'signatureUrl': normalizedSignatureUrl,
+      'urlAssinatura': normalizedSignatureUrl,
+      'photos': photos.map((photo) => photo.toJson()).toList(),
+      'urlFotos': normalizedUrlFotos,
+      'fotosJson': normalizedFotosJson,
+      'fotos_json': normalizedFotosJson,
+      'syncStatus': syncStatus,
+      'localUpdatedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  // ============================================================================
+  // SINCRONIZAÇÃO DE ESCOLAS E TÉCNICOS
+  // ============================================================================
+
+  Future<void> sendSchool(SchoolModel school, String acao) async {
+    final Map<String, dynamic> data = {
+      'acao': acao, // 'salvar_escola' ou 'deletar_escola'
+      'id': school.id,
+      'inep': school.inep,
+      'nome': school.name,
+      'endereco': school.address,
+      'municipio': school.city,
+      'uf': school.uf,
+      'gre': school.gre,
+    };
+    try {
+      await http.post(
+        Uri.parse(_scriptUrl),
+        headers: _jsonHeaders,
+        body: jsonEncode(data),
+      ).timeout(const Duration(seconds: 30));
+    } catch (e) {
+      debugPrint('Erro ao sincronizar escola: $e');
+    }
+  }
+
+  Future<List<SchoolModel>> fetchSchools() async {
+    final Map<String, dynamic> data = {'acao': 'buscar_escolas'};
+    try {
+      final decoded = await _postJson(data, timeout: const Duration(seconds: 40));
+      if (_isSuccess(decoded)) {
+        return _readMapList(decoded['data'], 'fetchSchools')
+            .map((item) => SchoolModel.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('Erro ao buscar escolas: $e');
+    }
+    return [];
+  }
+
+  Future<void> sendTechnician(TechnicianModel tech, String acao) async {
+    debugPrint('Usando aba de técnicos: ${Constants.techniciansSheetName}');
+    final Map<String, dynamic> data = {
+      'acao': acao, // 'salvar_tecnico' ou 'deletar_tecnico'
+      'sheetName': Constants.techniciansSheetName,
+      'id': tech.id,
+      'nome': tech.name,
+      'matricula': tech.registration,
+      'email': tech.email,
+      'permissao': tech.permissions,
+      'senha': tech.password,
+    };
+    try {
+      await http.post(
+        Uri.parse(_scriptUrl),
+        headers: _jsonHeaders,
+        body: jsonEncode(data),
+      ).timeout(const Duration(seconds: 30));
+    } catch (e) {
+      debugPrint('Erro ao sincronizar tecnico: $e');
+    }
+  }
+
+  // ============================================================================
+  // SINCRONIZAÇÃO DE VERSÃO
+  // ============================================================================
+  Future<Map<String, dynamic>> checkVersion() async {
+    final Map<String, dynamic> data = {
+      'acao': 'checar_versao',
+    };
+    try {
+      var request = http.Request('POST', Uri.parse(_scriptUrl));
+      request.headers.addAll(_jsonHeaders);
+      request.body = jsonEncode(data);
+      request.followRedirects = false; // Desativa redirect automático
+
+      var client = http.Client();
+      var streamedResponse = await client.send(request).timeout(const Duration(seconds: 30));
+      var response = await http.Response.fromStream(streamedResponse);
+
+      http.Response finalResponse = response;
+
+      if (response.statusCode == 302 || response.statusCode == 303) {
+        final location = response.headers['location'];
+        if (location != null) {
+          finalResponse = await http.get(Uri.parse(location)).timeout(const Duration(seconds: 30));
+        }
+      }
+
+      if (finalResponse.statusCode == 200) {
+        final decoded = _parseAndValidateResponse(finalResponse);
+        if (_isSuccess(decoded)) {
+          final Map<String, dynamic> resultMap = {};
+          decoded.forEach((key, value) {
+            resultMap[key.toString()] = value;
+          });
+          return resultMap;
+        }
+      }
+    } catch (e) {
+      debugPrint('Erro ao checar versão: $e');
+    }
+    return {};
+  }
+
+  List<ReportModel> _dedupeReportsById(List<ReportModel> reports) {
+    final byId = <String, ReportModel>{};
+    for (final report in reports) {
+      final id = report.id.trim();
+      if (id.isEmpty) continue;
+
+      final existing = byId[id];
+      if (existing == null) {
+        byId[id] = report;
+        continue;
+      }
+
+      final existingDate = existing.updatedAt ?? existing.localUpdatedAt ?? existing.lastSyncedAt ?? existing.visitDate;
+      final newDate = report.updatedAt ?? report.localUpdatedAt ?? report.lastSyncedAt ?? report.visitDate;
+      if (newDate.isAfter(existingDate) || newDate.isAtSameMomentAs(existingDate)) {
+        byId[id] = report;
+      }
+    }
+    return byId.values.toList();
+  }
+
+  // ============================================================================
+  // BUSCAR RELATÓRIOS DA NUVEM
+  // ============================================================================
+  Future<List<ReportModel>> fetchReports() async {
+    debugPrint('fetchReports iniciado');
+    final Map<String, dynamic> data = {
+      'action': 'buscar_relatorios',
+      'payload': <String, dynamic>{},
+    };
+    try {
+      var request = http.Request('POST', Uri.parse(_scriptUrl));
+      request.headers.addAll(_jsonHeaders);
+      request.body = jsonEncode(data);
+      request.followRedirects = false; // Desativa redirect automático
+
+      var client = http.Client();
+      var streamedResponse = await client.send(request).timeout(const Duration(seconds: 40));
+      var response = await http.Response.fromStream(streamedResponse);
+
+      http.Response finalResponse = response;
+
+      // Se o Google redirecionar (padrão do Apps Script), seguimos manualmente
+      if (response.statusCode == 302 || response.statusCode == 303) {
+        final location = response.headers['location'];
+        if (location != null) {
+          finalResponse = await http.get(Uri.parse(location)).timeout(const Duration(seconds: 40));
+        }
+      }
+
+      if (finalResponse.statusCode == 200) {
+        final body = utf8.decode(finalResponse.bodyBytes);
+        
+        if (body.trimLeft().startsWith('<')) {
+          throw Exception('Apps Script retornou HTML em vez de JSON.');
+        }
+
+        final decoded = fixMojibakeDeep(jsonDecode(body));
+        if (decoded is! Map) {
+          throw Exception('Resposta JSON inesperada do Apps Script');
+        }
+
+        final ok = decoded['status']?.toString().toLowerCase() == 'success' ||
+                   decoded['success'] == true;
+
+        if (!ok) {
+          throw Exception(decoded['message'] ?? decoded['error'] ?? 'Erro ao baixar relatórios');
+        }
+
+        // Garante que escolas estejam carregadas antes de inferir município
+        await SchoolService().loadSchoolsIfNeeded();
+
+        final rawData = decoded['data'];
+        final rows = <Map<String, dynamic>>[];
+        if (rawData is List) {
+          for (final item in rawData) {
+            if (item is Map) {
+              rows.add(Map<String, dynamic>.from(item));
+            }
+          }
+        }
+        debugPrint('Quantidade reports convertidos: ${rows.length}');
+
+        final List<ReportModel> reports = [];
+        for (final row in rows) {
+          try {
+            debugPrint('Convertendo relatório: id=${row['id']} numero=${row['reportNumber']}');
+            debugPrint('RAW TYPES: '
+              'subjects=${row['subjects']?.runtimeType}, '
+              'motivos=${row['motivos']?.runtimeType}, '
+              'subjectsList=${row['subjectsList']?.runtimeType}, '
+              'technicians=${row['technicians']?.runtimeType}, '
+              'tecnicos=${row['tecnicos']?.runtimeType}, '
+              'techniciansList=${row['techniciansList']?.runtimeType}, '
+              'photos=${row['photos']?.runtimeType}, '
+              'urlFotos=${row['urlFotos']?.runtimeType}, '
+              'fotosJson=${row['fotosJson']?.runtimeType}, '
+              'fotos_json=${row['fotos_json']?.runtimeType}, '
+              'Link Foto=${row['Link Foto']?.runtimeType}'
+            );
+
+            // ─── NORMALIZAÇÃO DEFENSIVA: converter TODOS os campos ambíguos ───
+            // O Apps Script pode retornar qualquer campo como List ou String
+            // dependendo da versão deployada. JsonUtils trata ambos sem cast.
+
+            // Listas → garantir List<String>
+            row['subjects']       = JsonUtils.asStringList(row['subjects']       ?? row['motivos']       ?? row['subjectsList']    ?? row['Motivos / Assuntos']);
+            row['technicians']    = JsonUtils.asStringList(row['technicians']    ?? row['tecnicos']      ?? row['techniciansList'] ?? row['Técnicos Presentes'] ?? row['Tecnicos Presentes']);
+            row['motivos']        = row['subjects'];   // alias consistente
+            row['tecnicos']       = row['technicians']; // alias consistente
+            row['subjectsList']   = row['subjects'];   // evitar re-parse
+            row['techniciansList'] = row['technicians'];
+
+            // Strings opcionais → garantir String? (nunca List)
+            row['fotosJson']    = JsonUtils.asNullableString(row['fotosJson']    ?? row['fotos_json']    ?? row['Fotos JSON']  ?? row['FOTOS_JSON']);
+            row['fotos_json']   = row['fotosJson'];
+            row['urlFotos']     = JsonUtils.asNullableString(row['urlFotos']     ?? row['Link Foto']     ?? row['Link Fotos'] ?? row['url_fotos']);
+            row['signatureUrl'] = JsonUtils.asNullableString(row['signatureUrl'] ?? row['urlAssinatura'] ?? row['Link Assinatura'] ?? row['URL_ASSINATURA']);
+            row['urlAssinatura'] = row['signatureUrl'];
+
+            // photos: se vier como List<dynamic> de Maps, mantém; se String, trata como urlFotos
+            // (parsePhotosFromJson do model já lida com ambos)
+            if (row['photos'] is String) {
+              // já está como string — parsePhotosFromJson vai processar
+            } else if (row['photos'] is! List) {
+              row['photos'] = <dynamic>[];
+            }
+
+            // Resolve cidade com todos os aliases possíveis
+            String? city = _firstNonEmpty(row, [
+              'schoolCity', 'municipio', 'município', 'municipioEscola',
+              'cidade', 'city', 'Município', 'Municipio', 'Cidade',
+              'Município da Escola', 'Cidade da Escola',
+            ]);
+
+            // Lê INEP com todos os aliases possíveis
+            final String? inep = _firstNonEmpty(row, [
+              'schoolInep', 'inep', 'INEP', 'codigoInep', 'códigoInep',
+              'codInep', 'inepEscola', 'INEP Escola', 'Código INEP',
+            ]);
+
+            // Se cidade veio vazia mas INEP existe, busca no SchoolService
+            if ((city == null || city.isEmpty) && inep != null && inep.isNotEmpty) {
+              city = findCityByInep(inep);
+            }
+
+            row['schoolCity'] = city;
+            row['schoolInep'] = inep;
+
+            final parsedReport = ReportModel.fromJson(row);
+            final report = parsedReport.copyWith(
+              syncStatus: 'synced',
+              lastSyncedAt: DateTime.now(),
+            );
+
+            reports.add(report);
+          } catch (e, stack) {
+            debugPrint('ERRO AO CONVERTER RELATÓRIO: $e');
+            debugPrint('LINHA COMPLETA COM ERRO: $row');
+            debugPrint('TIPOS NO ERRO: '
+              'subjects=${row['subjects']?.runtimeType}, '
+              'motivos=${row['motivos']?.runtimeType}, '
+              'subjectsList=${row['subjectsList']?.runtimeType}, '
+              'technicians=${row['technicians']?.runtimeType}, '
+              'tecnicos=${row['tecnicos']?.runtimeType}, '
+              'techniciansList=${row['techniciansList']?.runtimeType}, '
+              'photos=${row['photos']?.runtimeType}, '
+              'urlFotos=${row['urlFotos']?.runtimeType}, '
+              'fotosJson=${row['fotosJson']?.runtimeType}, '
+              'fotos_json=${row['fotos_json']?.runtimeType}, '
+              'Link Foto=${row['Link Foto']?.runtimeType}'
+            );
+            debugPrintStack(stackTrace: stack);
+            throw Exception('Falha ao ler relatório do Sheets: $e');
+          }
+        }
+
+        return _dedupeReportsById(reports);
+      }
+      throw Exception('Status code: ${finalResponse.statusCode}');
+    } catch (e) {
+      debugPrint('Erro ao buscar relatórios: $e');
+      rethrow;
+    }
+  }
+
+  // ============================================================================
+  // BUSCAR FUNCIONÁRIOS DA ABA "Funcionarios" DO SHEETS
+  // ============================================================================
+  Future<List<Map<String, String>>> fetchFuncionarios() async {
+    final Map<String, dynamic> data = {'acao': 'buscar_funcionarios'};
+    try {
+      var request = http.Request('POST', Uri.parse(_scriptUrl));
+      request.headers.addAll(_jsonHeaders);
+      request.body = jsonEncode(data);
+      request.followRedirects = false;
+
+      var client = http.Client();
+      var streamedResponse = await client.send(request).timeout(const Duration(seconds: 40));
+      var response = await http.Response.fromStream(streamedResponse);
+
+      http.Response finalResponse = response;
+
+      if (response.statusCode == 302 || response.statusCode == 303) {
+        final location = response.headers['location'];
+        if (location != null) {
+          finalResponse = await http.get(Uri.parse(location)).timeout(const Duration(seconds: 40));
+        }
+      }
+
+      if (finalResponse.statusCode == 200) {
+        final decoded = _parseAndValidateResponse(finalResponse);
+        if (_isSuccess(decoded)) {
+          final rows = _readMapList(decoded['data'], 'fetchFuncionarios');
+          return rows.map((item) => {
+            'matricula': item['matricula']?.toString() ?? '',
+            'nome': item['nome']?.toString() ?? '',
+          }).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('Erro ao buscar funcionários: $e');
+    }
+    return [];
+  }
+
+  // ============================================================================
+  // BUSCAR TÉCNICOS DA NUVEM
+  // ============================================================================
+  Future<List<TechnicianModel>> fetchTechnicians() async {
+    debugPrint('Usando aba de técnicos: ${Constants.techniciansSheetName}');
+    final Map<String, dynamic> data = {
+      'acao': 'buscar_tecnicos',
+      'sheetName': Constants.techniciansSheetName,
+    };
+    try {
+      var request = http.Request('POST', Uri.parse(_scriptUrl));
+      request.headers.addAll(_jsonHeaders);
+      request.body = jsonEncode(data);
+      request.followRedirects = false; 
+
+      var client = http.Client();
+      var streamedResponse = await client.send(request).timeout(const Duration(seconds: 40));
+      var response = await http.Response.fromStream(streamedResponse);
+
+      http.Response finalResponse = response;
+
+      if (response.statusCode == 302 || response.statusCode == 303) {
+        final location = response.headers['location'];
+        if (location != null) {
+          finalResponse = await http.get(Uri.parse(location)).timeout(const Duration(seconds: 40));
+        }
+      }
+
+      if (finalResponse.statusCode == 200) {
+        final decoded = _parseAndValidateResponse(finalResponse);
+        if (_isSuccess(decoded)) {
+          List<TechnicianModel> loaded = [];
+          for (final item in _readMapList(decoded['data'], 'fetchTechnicians')) {
+            loaded.add(TechnicianModel(
+              id: item['id'] ?? '',
+              name: fixMojibake(item['nome']?.toString() ?? ''),
+              registration: fixMojibake(item['matricula']?.toString() ?? ''),
+              email: fixMojibake(item['email']?.toString() ?? ''),
+              permissions: fixMojibake(item['permissao']?.toString() ?? ''),
+              password: item['senha']?.toString().isEmpty == false ? item['senha'] : null,
+            ));
+          }
+          return loaded;
+        }
+      }
+    } catch (e) {
+          debugPrint('Erro ao buscar técnicos: $e');
+    }
+    return [];
+  }
+
+  // ============================================================================
+  // HELPERS: INEP e MUNICÍPIO
+  // ============================================================================
+
+
+  /// Retorna o primeiro valor não-vazio dentre as chaves fornecidas no mapa.
+  static String? _firstNonEmpty(Map<String, dynamic> row, List<String> keys) {
+    for (final key in keys) {
+      final raw = row[key];
+      if (raw == null) continue;
+      final value = ReportModel.asString(raw).trim();
+      if (value.isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  /// Normaliza INEP removendo tudo que não for dígito.
+  static String _normalizeInep(String? value) {
+    return value?.replaceAll(RegExp(r'[^0-9]'), '').trim() ?? '';
+  }
+
+  /// Busca a cidade de uma escola pelo INEP no SchoolService.
+  /// Retorna null se não encontrar.
+  static String? findCityByInep(String? inep) {
+    final cleanInep = _normalizeInep(inep);
+    if (cleanInep.isEmpty) return null;
+
+    for (final school in SchoolService().schools) {
+      if (_normalizeInep(school.inep) == cleanInep) {
+        final city = school.city.trim();
+        if (city.isNotEmpty) return city;
+      }
+    }
+    return null;
+  }
+
+  /// Busca o INEP de uma escola pelo nome normalizado no SchoolService.
+  static String? findInepBySchoolName(String? name) {
+    if (name == null || name.trim().isEmpty) return null;
+    final nameLower = name.trim().toLowerCase();
+    for (final school in SchoolService().schools) {
+      if (school.name.trim().toLowerCase() == nameLower) {
+        final inep = school.inep.trim();
+        if (inep.isNotEmpty) return inep;
+      }
+    }
+    return null;
+  }
+
+  // ============================================================================
+  // CORRIGIR MUNICÍPIOS ANTIGOS NA ABA RELATORIOS (Apps Script)
+  // ============================================================================
+
+  /// Chama a rotina no Apps Script que percorre a aba RELATORIOS e preenche
+  /// a coluna "municipio" nos registros que estão com esse campo vazio.
+  /// Requer que a action 'corrigirMunicipiosRelatorios' esteja implementada no GAS.
+  Future<Map<String, dynamic>> corrigirMunicipiosRelatorios() async {
+    final Map<String, dynamic> data = {'acao': 'corrigirMunicipiosRelatorios'};
+    try {
+      var request = http.Request('POST', Uri.parse(_scriptUrl));
+      request.headers.addAll(_jsonHeaders);
+      request.body = jsonEncode(data);
+      request.followRedirects = false;
+
+      var client = http.Client();
+      var streamedResponse = await client.send(request).timeout(const Duration(seconds: 60));
+      var response = await http.Response.fromStream(streamedResponse);
+
+      http.Response finalResponse = response;
+      if (response.statusCode == 302 || response.statusCode == 303) {
+        final location = response.headers['location'];
+        if (location != null) {
+          finalResponse = await http.get(Uri.parse(location)).timeout(const Duration(seconds: 60));
+        }
+      }
+
+      if (finalResponse.statusCode == 200) {
+        final decoded = _parseAndValidateResponse(finalResponse);
+        return Map<String, dynamic>.from(decoded);
+      }
+    } catch (e) {
+      debugPrint('Erro ao corrigir municípios antigos: $e');
+    }
+    return {'success': false, 'message': 'Erro de conexão'};
+  }
+
+  Map<String, dynamic> _parseAndValidateResponse(http.Response response) {
+    final body = utf8.decode(response.bodyBytes);
+    final contentType = response.headers['content-type']?.toLowerCase() ?? '';
+    
+    debugPrint('Apps Script status: ${response.statusCode}');
+    final snippet = body.substring(0, body.length > 500 ? 500 : body.length);
+    debugPrint('Apps Script response: $snippet');
+
+    final trimmedLeft = body.trimLeft();
+    final lowerBody = trimmedLeft.toLowerCase();
+    if (contentType.contains('text/html') ||
+        lowerBody.startsWith('<!doctype html') ||
+        lowerBody.startsWith('<html') ||
+        lowerBody.startsWith('<body') ||
+        lowerBody.startsWith('<')) {
+      throw Exception(
+        'Apps Script retornou HTML em vez de JSON. Verifique a URL /exec e a implantacao.'
+      );
+    }
+
+    try {
+      final decoded = fixMojibakeDeep(jsonDecode(body));
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+      throw Exception('Resposta JSON inesperada do Apps Script');
+    } catch (e) {
+      throw Exception(
+        'A API retornou uma resposta que não pôde ser decodificada como JSON. Detalhes: $e'
+      );
+    }
+  }
+  /// Returns set of IDs pending creation (offline 'adicionar' with 'Criar')
+  Future<Set<String>> getPendingCreateIds() async {
+    final queue = await _getOfflineQueue();
+    final ids = <String>{};
+    for (var item in queue) {
+      final action = (item['acao'] ?? item['action'] ?? '').toString().trim();
+      final actionTipo = (item['acao_tipo'] ?? '').toString().trim();
+      if (action == 'adicionar' && actionTipo == 'Criar') {
+        final id = (item['id'] ?? '').toString().trim();
+        if (id.isNotEmpty) ids.add(id);
+      }
+    }
+    return ids;
+  }
+
+  /// Returns set of IDs pending update (offline 'adicionar' with 'Editar')
+  Future<Set<String>> getPendingUpdateIds() async {
+    final queue = await _getOfflineQueue();
+    final ids = <String>{};
+    for (var item in queue) {
+      final action = (item['acao'] ?? item['action'] ?? '').toString().trim();
+      final actionTipo = (item['acao_tipo'] ?? '').toString().trim();
+      if (action == 'adicionar' && actionTipo == 'Editar') {
+        final id = (item['id'] ?? '').toString().trim();
+        if (id.isNotEmpty) ids.add(id);
+      }
+    }
+    return ids;
+  }
+
+  /// Returns set of IDs pending deletion (offline 'deletar_relatorio')
+  Future<Set<String>> getPendingDeleteIds() async {
+    final queue = await _getOfflineQueue();
+    final ids = <String>{};
+    for (var item in queue) {
+      final action = (item['acao'] ?? item['action'] ?? '').toString().trim();
+      if (action == 'deletar_relatorio') {
+        final id = (item['id'] ?? '').toString().trim();
+        if (id.isNotEmpty) ids.add(id);
+      }
+    }
+    return ids;
+  }
+
+}
