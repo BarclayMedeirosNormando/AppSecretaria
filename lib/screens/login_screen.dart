@@ -451,6 +451,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             controller: _emailController,
                             prefixIcon: Icons.email_outlined,
                             keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
                             validator: (value) {
                               if (value == null || value.trim().isEmpty) {
                                 return 'Por favor, insira seu e-mail';
@@ -467,6 +468,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             controller: _passwordController,
                             prefixIcon: Icons.lock_outline_rounded,
                             obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => _login(),
                             suffixIcon: Tooltip(
                               message: _obscurePassword ? 'Mostrar senha' : 'Ocultar senha',
                               child: IconButton(

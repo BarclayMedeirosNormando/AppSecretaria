@@ -40,7 +40,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isSyncing = false;
   
   // Navigation State
-  String _searchQuery = '';  NavigationLevel _currentLevel = NavigationLevel.regional;
+  String _searchQuery = '';
+NavigationLevel _currentLevel = NavigationLevel.regional;
   String? _selectedRegional;
   String? _selectedCity;
   String? _selectedSchool;
@@ -84,8 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-    }
-  }
+
 
   ReportModel _hydrateMissingCity(ReportModel report) {
     // Já tem cidade preenchida: retorna direto

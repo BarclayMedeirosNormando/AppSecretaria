@@ -1665,48 +1665,7 @@ class GoogleSheetsService {
       );
     }
   }
-  /// Returns set of IDs pending creation (offline 'adicionar' with 'Criar')
-  Future<Set<String>> getPendingCreateIds() async {
-    final queue = await _getOfflineQueue();
-    final ids = <String>{};
-    for (var item in queue) {
-      final action = (item['acao'] ?? item['action'] ?? '').toString().trim();
-      final actionTipo = (item['acao_tipo'] ?? '').toString().trim();
-      if (action == 'adicionar' && actionTipo == 'Criar') {
-        final id = (item['id'] ?? '').toString().trim();
-        if (id.isNotEmpty) ids.add(id);
-      }
-    }
-    return ids;
-  }
 
-  /// Returns set of IDs pending update (offline 'adicionar' with 'Editar')
-  Future<Set<String>> getPendingUpdateIds() async {
-    final queue = await _getOfflineQueue();
-    final ids = <String>{};
-    for (var item in queue) {
-      final action = (item['acao'] ?? item['action'] ?? '').toString().trim();
-      final actionTipo = (item['acao_tipo'] ?? '').toString().trim();
-      if (action == 'adicionar' && actionTipo == 'Editar') {
-        final id = (item['id'] ?? '').toString().trim();
-        if (id.isNotEmpty) ids.add(id);
-      }
-    }
-    return ids;
-  }
-
-  /// Returns set of IDs pending deletion (offline 'deletar_relatorio')
-  Future<Set<String>> getPendingDeleteIds() async {
-    final queue = await _getOfflineQueue();
-    final ids = <String>{};
-    for (var item in queue) {
-      final action = (item['acao'] ?? item['action'] ?? '').toString().trim();
-      if (action == 'deletar_relatorio') {
-        final id = (item['id'] ?? '').toString().trim();
-        if (id.isNotEmpty) ids.add(id);
-      }
-    }
-    return ids;
-  }
+  
 
 }
