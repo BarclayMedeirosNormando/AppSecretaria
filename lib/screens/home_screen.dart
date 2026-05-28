@@ -18,6 +18,7 @@ import 'login_screen.dart';
 import 'school_list_screen.dart';
 import 'technician_list_screen.dart';
 import 'historico_screen.dart';
+import 'sync_pending_screen.dart';
 import '../services/school_service.dart';
 
 enum NavigationLevel { regional, city, school, reports }
@@ -68,7 +69,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // Count only pending creates and updates
       final createIds = await _sheetsService.getPendingCreateIds();
       final updateIds = await _sheetsService.getPendingUpdateIds();
-      final count = createIds.length + updateIds.length;
+      final count = await _sheetsService.getPendingSyncCount();
       final pendingIds = {...createIds, ...updateIds};
       var reportsChanged = false;
 
@@ -558,6 +559,27 @@ class _HomeScreenState extends State<HomeScreen> {
     await _runSync(manual: true);
   }
 
+  Future<void> _openPendingSyncScreen() async {
+    final pendingCount = await _sheetsService.getPendingSyncCount();
+    await _updateSyncCount();
+
+    if (!mounted) return;
+
+    if (pendingCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nenhuma pendência para sincronizar.')),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (ctx) => SyncPendingScreen(onSyncNow: _syncOffline),
+      ),
+    );
+    await _updateSyncCount();
+  }
+
   /// Performs automatic synchronization when HomeScreen is first displayed.
   /// Ensures it runs only once and updates UI with status messages.
   Future<void> _autoSyncOnStart() async {
@@ -932,8 +954,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: const Icon(Icons.sync_rounded),
               )
             : const Icon(Icons.sync_rounded),
-        onPressed: _isSyncing ? null : _syncOffline,
-        tooltip: 'Sincronizar Offline',
+        onPressed: _isSyncing ? null : _openPendingSyncScreen,
+        tooltip: 'Pendências de sincronização',
       ),
     ];
   }

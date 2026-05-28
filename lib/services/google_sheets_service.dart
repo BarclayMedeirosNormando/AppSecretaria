@@ -12,6 +12,28 @@ import '../utils/text_encoding.dart';
 import '../utils/json_utils.dart';
 import 'school_service.dart';
 
+class PendingSyncItem {
+  final String id;
+  final String entityType;
+  final String actionLabel;
+  final String reportNumber;
+  final String title;
+  final DateTime? queuedAt;
+  final String status;
+  final Map<String, dynamic> rawData;
+
+  const PendingSyncItem({
+    required this.id,
+    required this.entityType,
+    required this.actionLabel,
+    required this.reportNumber,
+    required this.title,
+    required this.queuedAt,
+    required this.status,
+    required this.rawData,
+  });
+}
+
 class GoogleSheetsService {
   // A URL do Apps Script gerada
   static const String _scriptUrl = 'https://script.google.com/macros/s/AKfycbxw2FWbqnNvCdnMORY4BMg44mfplFi8YQ838GNhKFQUBMfsI3HMyISq742LxKoWqqp5/exec';
@@ -267,15 +289,17 @@ class GoogleSheetsService {
   /// aplicando regras de deduplicação e normalização inteligentes.
   Future<void> _saveOffline(Map<String, dynamic> data) async {
     final List<Map<String, dynamic>> parsedQueue = await _getOfflineQueue();
+    final pendingData = Map<String, dynamic>.from(data);
+    pendingData['_pendingCreatedAt'] ??= DateTime.now().toIso8601String();
     
-    final String targetId = data['id']?.toString() ?? '';
+    final String targetId = pendingData['id']?.toString() ?? '';
     if (targetId.isEmpty) {
       debugPrint('Tentativa de salvar operação offline sem ID válido. Ignorado.');
       return;
     }
 
-    final String targetAction = data['acao']?.toString() ?? ''; // 'adicionar' ou 'deletar_relatorio'
-    final String targetActionType = data['acao_tipo']?.toString() ?? ''; // 'Criar' ou 'Editar'
+    final String targetAction = pendingData['acao']?.toString() ?? ''; // 'adicionar' ou 'deletar_relatorio'
+    final String targetActionType = pendingData['acao_tipo']?.toString() ?? ''; // 'Criar' ou 'Editar'
 
     bool handled = false;
 
@@ -297,7 +321,7 @@ class GoogleSheetsService {
         debugPrint('Deduplicação offline: Relatório $targetId deletado localmente antes de subir. Fila limpa para este ID.');
       } else {
         parsedQueue.removeWhere((item) => item['id']?.toString() == targetId);
-        parsedQueue.add(data);
+        parsedQueue.add(pendingData);
         handled = true;
         debugPrint('Deduplicação offline: Relatório $targetId marcado para deleção na nuvem. Fila limpa de updates anteriores.');
       }
@@ -309,10 +333,18 @@ class GoogleSheetsService {
       //   atualizamos o payload com os novos dados e mantemos como 'Editar'.
       for (int i = 0; i < parsedQueue.length; i++) {
         final item = parsedQueue[i];
-        if (item['id']?.toString() == targetId && item['acao'] == 'adicionar') {
-          final String originalActionType = item['acao_tipo']?.toString() ?? 'Criar';
-          parsedQueue[i] = Map<String, dynamic>.from(data);
+        if (item['id']?.toString() == targetId &&
+            item['acao'] == 'adicionar') {
+          final String originalActionType =
+              item['acao_tipo']?.toString() ?? 'Criar';
+          final originalPendingCreatedAt =
+              item['_pendingCreatedAt']?.toString();
+          parsedQueue[i] = Map<String, dynamic>.from(pendingData);
           parsedQueue[i]['acao_tipo'] = originalActionType;
+          if (originalPendingCreatedAt != null &&
+              originalPendingCreatedAt.isNotEmpty) {
+            parsedQueue[i]['_pendingCreatedAt'] = originalPendingCreatedAt;
+          }
           handled = true;
           debugPrint('Deduplicação offline: Payload atualizado da operação "$originalActionType" pendente do relatório $targetId.');
           break;
@@ -321,14 +353,14 @@ class GoogleSheetsService {
     }
 
     if (!handled) {
-      parsedQueue.add(data);
+      parsedQueue.add(pendingData);
       debugPrint('Deduplicação offline: Nova operação "${targetAction == 'adicionar' ? targetActionType : 'Deletar'}" adicionada para o relatório $targetId.');
     }
 
     await _saveOfflineQueue(parsedQueue);
     if (targetAction == 'adicionar') {
       await _upsertLocalPendingReportFromPayload(
-        data,
+        pendingData,
         syncStatus: targetActionType == 'Editar'
             ? 'pending_update'
             : 'pending_create',
@@ -858,8 +890,15 @@ class GoogleSheetsService {
   }
 
   /// Tenta enviar uma operação individual para o Apps Script
+  Map<String, dynamic> _payloadForSync(Map<String, dynamic> op) {
+    final payload = Map<String, dynamic>.from(op);
+    payload.removeWhere((key, _) => key.startsWith('_pending'));
+    return payload;
+  }
+
   Future<Map<String, dynamic>> _sendOperation(Map<String, dynamic> op) async {
-    final decoded = await _postJson(op, timeout: const Duration(seconds: 40));
+    final decoded =
+        await _postJson(_payloadForSync(op), timeout: const Duration(seconds: 40));
     if (!_isSuccessResponse(decoded)) {
       final msg = decoded['message']?.toString() ?? '';
       final action = op['acao']?.toString() ?? '';
@@ -1019,7 +1058,7 @@ class GoogleSheetsService {
     try {
       final decoded = await _postJson({
         'action': 'syncReportsBatch',
-        'reports': queue,
+        'reports': queue.map(_payloadForSync).toList(),
       }, timeout: const Duration(seconds: 80));
 
       List<Map<String, dynamic>> remaining;
@@ -1210,6 +1249,99 @@ class GoogleSheetsService {
   }
 
   /// Retorna os IDs dos relatórios pendentes de criação
+  Future<List<PendingSyncItem>> getPendingSyncItems() async {
+    final queue = await normalizeOfflineQueue();
+    if (queue.isEmpty) return [];
+
+    final localReports = await _loadLocalReports();
+    final reportsById = {for (final report in localReports) report.id: report};
+
+    return queue.map((op) {
+      final id = (op['id'] ?? op['reportId'] ?? op['report_id'] ?? '')
+          .toString()
+          .trim();
+      final action = (op['acao'] ?? op['action'] ?? '').toString().trim();
+      final actionType = (op['acao_tipo'] ?? '').toString().trim();
+      final report = reportsById[id];
+      final queuedAt = _pendingQueuedAt(op) ??
+          report?.localUpdatedAt ??
+          report?.updatedAt ??
+          report?.lastSyncedAt;
+
+      return PendingSyncItem(
+        id: id,
+        entityType: _pendingEntityType(action),
+        actionLabel: _pendingActionLabel(action, actionType),
+        reportNumber: ReportModel.asString(
+          op['numero_relatorio'] ??
+              op['reportNumber'] ??
+              op['numeroRelatorio'] ??
+              report?.reportNumber ??
+              id,
+        ),
+        title: ReportModel.asString(
+          op['escola'] ??
+              op['schoolName'] ??
+              op['nome'] ??
+              op['name'] ??
+              report?.schoolName ??
+              'Item sem nome',
+        ),
+        queuedAt: queuedAt,
+        status: 'Pendente',
+        rawData: Map<String, dynamic>.from(op),
+      );
+    }).toList()
+      ..sort((a, b) {
+        final aDate = a.queuedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate = b.queuedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bDate.compareTo(aDate);
+      });
+  }
+
+  String _pendingEntityType(String action) {
+    final lower = action.toLowerCase();
+    if (lower.contains('escola')) return 'Escola';
+    if (lower.contains('tecnico') || lower.contains('técnico')) return 'Técnico';
+    return 'Relatório';
+  }
+
+  String _pendingActionLabel(String action, String actionType) {
+    final lowerAction = action.toLowerCase();
+    final lowerType = actionType.toLowerCase();
+    if (lowerAction.contains('deletar') || lowerAction.contains('delete')) {
+      return 'Excluir';
+    }
+    if (lowerType.contains('criar') || lowerAction == 'sendreport') {
+      return 'Criar';
+    }
+    if (lowerType.contains('editar') || lowerAction.contains('update')) {
+      return 'Editar';
+    }
+    return 'Editar';
+  }
+
+  DateTime? _pendingQueuedAt(Map<String, dynamic> op) {
+    final candidates = [
+      op['_pendingCreatedAt'],
+      op['queuedAt'],
+      op['createdAt'],
+      op['created_at'],
+      op['data_pendencia'],
+      op['timestamp'],
+      op['localUpdatedAt'],
+      op['updatedAt'],
+    ];
+
+    for (final value in candidates) {
+      final text = ReportModel.asString(value).trim();
+      if (text.isEmpty) continue;
+      final parsed = DateTime.tryParse(text);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
   Future<Set<String>> getPendingCreateIds() async {
     final queue = await normalizeOfflineQueue();
     Set<String> ids = {};
