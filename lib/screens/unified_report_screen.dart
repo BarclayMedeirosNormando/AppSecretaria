@@ -81,17 +81,29 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
 
   String _normalize(String? value) {
     if (value == null) return '';
-    String result = value.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
-    
-    // Remocao basica de acentos e diacriticos
-    const withDiacritics = 'ÀÁÂÃÄÅàáâãäåÒÓÔÕÖØòóôõöøÈÉÊËèéêëÇçÌÍÎÏìíîïÙÚÛÜùúûüÿÑñ';
-    const withoutDiacritics = 'AAAAAAaaaaaaOOOOOOooooooEEEEeeeeCcIIIIiiiiUUUUuuuuyNn';
-    
-    for (int i = 0; i < withDiacritics.length; i++) {
-      result = result.replaceAll(withDiacritics[i], withoutDiacritics[i]);
-    }
-    
-    return result;
+    return value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[áàâãäå]'), 'a')
+        .replaceAll(RegExp(r'[éèêë]'), 'e')
+        .replaceAll(RegExp(r'[íìîï]'), 'i')
+        .replaceAll(RegExp(r'[óòôõöø]'), 'o')
+        .replaceAll(RegExp(r'[úùûü]'), 'u')
+        .replaceAll('ç', 'c')
+        .replaceAll('ñ', 'n')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  String _normalizeFilterText(String value) => _normalize(value);
+
+  bool _sameFilterText(String? left, String? right) {
+    return _normalize(left) == _normalize(right);
+  }
+
+  bool _containsFilterText(Iterable<String> values, String? selected) {
+    final normalized = _normalize(selected);
+    if (normalized.isEmpty) return false;
+    return values.any((value) => _normalize(value) == normalized);
   }
 
   Future<void> _loadTechnicians() async {
@@ -199,22 +211,29 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
   }
 
   List<SchoolModel> _getFilteredSchools(String query) {
-    final q = _normalize(query);
-    final reg = _normalize(_filterRegional);
-    final city = _normalize(_filterCity);
+    var result = List<SchoolModel>.from(_availableSchools);
+    final reg = _normalizeFilterText(_filterRegional ?? '');
+    final city = _normalizeFilterText(_filterCity ?? '');
+    final q = _normalizeFilterText(query);
 
-    final result = _availableSchools.where((s) {
-      final matchesRegional = reg.isEmpty || _normalize(s.gre) == reg;
-      final matchesCity = city.isEmpty || _normalize(s.city) == city;
+    if (reg.isNotEmpty) {
+      result = result
+          .where((s) => _normalizeFilterText(s.gre) == reg)
+          .toList();
+    }
 
-      final matchesSearch = q.isEmpty ||
-          _normalize(s.name).contains(q) ||
-          _normalize(s.inep).contains(q) ||
-          _normalize(s.city).contains(q) ||
-          _normalize(s.gre).contains(q);
+    if (city.isNotEmpty) {
+      result = result
+          .where((s) => _normalizeFilterText(s.city) == city)
+          .toList();
+    }
 
-      return matchesRegional && matchesCity && matchesSearch;
-    }).toList();
+    if (q.isNotEmpty) {
+      result = result.where((s) {
+        return _normalizeFilterText(s.name).contains(q) ||
+            _normalizeFilterText(s.inep).contains(q);
+      }).toList();
+    }
 
     result.sort((a, b) {
       final greCompare = _normalize(a.gre).compareTo(_normalize(b.gre));
@@ -227,6 +246,54 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
     });
 
     return result;
+  }
+
+  List<String> _regionalsForCity(String? city) {
+    final normalizedCity = _normalizeFilterText(city ?? '');
+    if (normalizedCity.isEmpty) return [];
+
+    final citySchools = _availableSchools
+        .where((s) => _normalizeFilterText(s.city) == normalizedCity)
+        .toList();
+
+    if (citySchools.any((s) => s.gre.trim().isEmpty)) return [];
+
+    final regionals = citySchools
+        .map((s) => s.gre.trim())
+        .where((gre) => gre.isNotEmpty)
+        .toSet()
+        .toList();
+
+    regionals.sort((a, b) => _normalize(a).compareTo(_normalize(b)));
+    return regionals;
+  }
+
+  void _handleRegionalChanged(String? regional) {
+    setState(() {
+      _filterRegional = regional;
+
+      if (_filterCity != null &&
+          !_containsFilterText(_availableCities, _filterCity)) {
+        _filterCity = null;
+      }
+
+      _clearSelectedSchool();
+    });
+  }
+
+  void _handleCityChanged(String? city) {
+    setState(() {
+      _filterCity = city;
+
+      if (_normalizeFilterText(_filterRegional ?? '').isEmpty) {
+        final cityRegionals = _regionalsForCity(city);
+        if (cityRegionals.length == 1) {
+          _filterRegional = cityRegionals.first;
+        }
+      }
+
+      _clearSelectedSchool();
+    });
   }
 
   void _clearSelectedSchool({bool clearSchoolText = true}) {
@@ -514,18 +581,14 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         prefixIcon: const Icon(Icons.map_outlined),
                       ),
-                      initialValue: _availableRegionals.any((r) => _normalize(r) == _normalize(_filterRegional)) ? _filterRegional : null,
+                      initialValue: _containsFilterText(_availableRegionals, _filterRegional)
+                          ? _filterRegional
+                          : null,
                       items: [
                         const DropdownMenuItem(value: null, child: Text('Todas as Regionais')),
                         ..._availableRegionals.map((r) => DropdownMenuItem(value: r, child: Text(r, overflow: TextOverflow.ellipsis)))
                       ],
-                      onChanged: (value) {
-                        setState(() {
-                          _filterRegional = value;
-                          _filterCity = null;
-                          _clearSelectedSchool();
-                        });
-                      },
+                      onChanged: _handleRegionalChanged,
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -538,17 +601,14 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         prefixIcon: const Icon(Icons.location_city_outlined),
                       ),
-                      initialValue: _availableCities.any((c) => _normalize(c) == _normalize(_filterCity)) ? _filterCity : null,
+                      initialValue: _containsFilterText(_availableCities, _filterCity)
+                          ? _filterCity
+                          : null,
                       items: [
                         const DropdownMenuItem(value: null, child: Text('Todos os Municípios')),
                         ..._availableCities.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis)))
                       ],
-                      onChanged: (value) {
-                        setState(() {
-                          _filterCity = value;
-                          _clearSelectedSchool();
-                        });
-                      },
+                      onChanged: _handleCityChanged,
                     ),
                   ),
                 ],
@@ -562,18 +622,14 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   prefixIcon: const Icon(Icons.map_outlined),
                 ),
-                initialValue: _availableRegionals.any((r) => _normalize(r) == _normalize(_filterRegional)) ? _filterRegional : null,
+                initialValue: _containsFilterText(_availableRegionals, _filterRegional)
+                    ? _filterRegional
+                    : null,
                 items: [
                   const DropdownMenuItem(value: null, child: Text('Todas as Regionais')),
                   ..._availableRegionals.map((r) => DropdownMenuItem(value: r, child: Text(r, overflow: TextOverflow.ellipsis)))
                 ],
-                onChanged: (value) {
-                  setState(() {
-                    _filterRegional = value;
-                    _filterCity = null;
-                    _clearSelectedSchool();
-                  });
-                },
+                onChanged: _handleRegionalChanged,
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
@@ -584,17 +640,14 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   prefixIcon: const Icon(Icons.location_city_outlined),
                 ),
-                initialValue: _availableCities.any((c) => _normalize(c) == _normalize(_filterCity)) ? _filterCity : null,
+                initialValue: _containsFilterText(_availableCities, _filterCity)
+                    ? _filterCity
+                    : null,
                 items: [
                   const DropdownMenuItem(value: null, child: Text('Todos os Municípios')),
                   ..._availableCities.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis)))
                 ],
-                onChanged: (value) {
-                  setState(() {
-                    _filterCity = value;
-                    _clearSelectedSchool();
-                  });
-                },
+                onChanged: _handleCityChanged,
               ),
             ],
 
@@ -607,7 +660,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                   style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500),
                 ),
                 Text(
-                  '${_getFilteredSchools('').length} escola(s) encontrada(s)',
+                  '${_getFilteredSchools(_schoolSearchController.text).length} escola(s) encontrada(s)',
                   style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ],
@@ -671,10 +724,16 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                       _selectedSchoolCity = selection.city;
                       _selectedSchoolInep = selection.inep;
                       if (_filterRegional == null || _filterRegional!.isEmpty) {
-                        _filterRegional = _availableRegionals.any((r) => _normalize(r) == _normalize(selection.gre)) ? selection.gre : null;
+                        _filterRegional =
+                            _containsFilterText(_availableRegionals, selection.gre)
+                                ? selection.gre
+                                : null;
                       }
                       if (_filterCity == null || _filterCity!.isEmpty) {
-                        _filterCity = _availableCities.any((c) => _normalize(c) == _normalize(selection.city)) ? selection.city : null;
+                        _filterCity =
+                            _containsFilterText(_availableCities, selection.city)
+                                ? selection.city
+                                : null;
                       }
                       _schoolSearchController.text = selection.name;
                     });
@@ -692,9 +751,12 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                       onEditingComplete: onEditingComplete,
                       validator: (value) => _selectedSchool == null ? 'Selecione uma escola da lista' : null,
                       onChanged: (v) {
-                        if (_selectedSchool != null && v != _selectedSchool) {
-                          setState(() => _selectedSchool = null);
-                        }
+                        setState(() {
+                          if (_selectedSchool != null &&
+                              !_sameFilterText(v, _selectedSchool)) {
+                            _clearSelectedSchool(clearSchoolText: false);
+                          }
+                        });
                       },
                     );
                   },
