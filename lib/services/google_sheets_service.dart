@@ -804,7 +804,11 @@ class GoogleSheetsService {
               : action;
 
       // Regra: remover item cujo relatório não existe e action não é delete
-      if (canonicalAction != 'deletar_relatorio' && !localReportIds.contains(id)) {
+      final isReportAction = canonicalAction == 'adicionar' ||
+          canonicalAction == 'deletar_relatorio';
+      if (isReportAction &&
+          canonicalAction != 'deletar_relatorio' &&
+          !localReportIds.contains(id)) {
         continue;
       }
 
