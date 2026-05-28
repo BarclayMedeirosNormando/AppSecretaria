@@ -504,7 +504,8 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
     final hasError = _selectedDate == null && _formKey.currentState != null && !_formKey.currentState!.validate();
 
     return SectionCard(
-      title: 'Data do Chamado',
+      title: 'Dados da Visita',
+      icon: Icons.event_note_outlined,
       child: InkWell(
         onTap: _presentDatePicker,
         borderRadius: BorderRadius.circular(12),
@@ -847,26 +848,28 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Escola Selecionada',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
+                              _selectedSchool!,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: theme.colorScheme.onPrimaryContainer,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
-                          Icon(Icons.map_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Regional: ${_gre ?? "N/A"}',
-                              style: TextStyle(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurfaceVariant),
-                            ),
-                          ),
+                          _buildSelectedSchoolChip(Icons.map_outlined, _gre ?? 'GRE não informada'),
+                          _buildSelectedSchoolChip(Icons.location_city_outlined, _selectedSchoolCity ?? 'Município não informado'),
+                          _buildSelectedSchoolChip(Icons.numbers_rounded, _selectedSchoolInep ?? 'INEP não informado'),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -904,120 +907,180 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
     );
   }
 
-  Widget _buildSubjectsAndTechniciansSection() {
-    final theme = Theme.of(context);
-
-    return SectionCard(
-      title: 'Motivos e Equipe',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _buildSelectedSchoolChip(IconData icon, String label) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          InkWell(
-            onTap: () => _openMultiSelect('Motivo do Chamado', _mockSubjects, _selectedSubjects, (res) => _selectedSubjects = res),
-            borderRadius: BorderRadius.circular(12),
-            child: InputDecorator(
-              decoration: InputDecoration(
-                labelText: 'Motivos do Chamado',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                prefixIcon: Icon(Icons.category_outlined, color: theme.colorScheme.primary),
-                suffixIcon: Icon(Icons.add_circle_outline, color: theme.colorScheme.primary),
-              ),
-              child: _selectedSubjects.isEmpty
-                  ? Text('Selecionar motivos', style: TextStyle(fontSize: 16, color: theme.colorScheme.onSurfaceVariant))
-                  : Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: _selectedSubjects.map((s) => Chip(
-                        label: Text(s, style: const TextStyle(fontSize: 12)),
-                        backgroundColor: theme.colorScheme.secondaryContainer,
-                        side: BorderSide.none,
-                      )).toList(),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          InkWell(
-            onTap: () {
-              if (_isLoadingTechnicians) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Carregando técnicos...')),
-                );
-                return;
-              }
-
-              if (_availableTechnicians.isEmpty && _techniciansLoadError != null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Erro ao carregar técnicos da aba Técnicos: $_techniciansLoadError'),
-                    action: SnackBarAction(
-                      label: 'Tentar novamente',
-                      onPressed: _loadTechnicians,
-                    ),
-                  ),
-                );
-                return;
-              }
-
-              if (_availableTechnicians.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Nenhum técnico encontrado na aba Técnicos.'),
-                    action: SnackBarAction(
-                      label: 'Recarregar',
-                      onPressed: _loadTechnicians,
-                    ),
-                  ),
-                );
-                return;
-              }
-
-              final setOfNames = _availableTechnicians
-                  .map((t) => t.name.trim())
-                  .where((name) => name.isNotEmpty)
-                  .toSet();
-
-              // Preservar técnicos antigos selecionados mesmo se não estiverem na lista atual
-              for (var existingName in _selectedTechnicians) {
-                if (existingName.trim().isNotEmpty) {
-                  setOfNames.add(existingName.trim());
-                }
-              }
-
-              final technicianNames = setOfNames.toList()
-                ..sort((a, b) => _normalize(a).compareTo(_normalize(b)));
-
-              _openMultiSelect('Técnico(s)', technicianNames, _selectedTechnicians, (res) => _selectedTechnicians = res);
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: InputDecorator(
-              decoration: InputDecoration(
-                labelText: 'Técnicos',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                prefixIcon: Icon(Icons.engineering_outlined, color: theme.colorScheme.primary),
-                suffixIcon: _isLoadingTechnicians
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(Icons.add_circle_outline, color: theme.colorScheme.primary),
-              ),
-              child: _selectedTechnicians.isEmpty
-                  ? Text('Selecionar técnicos', style: TextStyle(fontSize: 16, color: theme.colorScheme.onSurfaceVariant))
-                  : Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: _selectedTechnicians.map((t) => Chip(
-                        avatar: Icon(Icons.person_rounded, size: 16, color: theme.colorScheme.onSecondaryContainer),
-                        label: Text(t, style: const TextStyle(fontSize: 12)),
-                        backgroundColor: theme.colorScheme.secondaryContainer,
-                        side: BorderSide.none,
-                      )).toList(),
-                    ),
-            ),
+          Icon(icon, size: 14, color: colorScheme.primary),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSubjectsSection() {
+    final theme = Theme.of(context);
+
+    return SectionCard(
+      title: 'Motivos / Assuntos',
+      icon: Icons.category_outlined,
+      child: InkWell(
+        onTap: () => _openMultiSelect('Motivo do Chamado', _mockSubjects, _selectedSubjects, (res) => _selectedSubjects = res),
+        borderRadius: BorderRadius.circular(12),
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'Motivos do Chamado',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            prefixIcon: Icon(Icons.category_outlined, color: theme.colorScheme.primary),
+            suffixIcon: Icon(Icons.add_circle_outline, color: theme.colorScheme.primary),
+          ),
+          child: _selectedSubjects.isEmpty
+              ? Text('Selecionar motivos', style: TextStyle(fontSize: 16, color: theme.colorScheme.onSurfaceVariant))
+              : Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: _selectedSubjects.map((subject) => Chip(
+                    label: Text(subject, style: const TextStyle(fontSize: 12)),
+                    backgroundColor: theme.colorScheme.secondaryContainer,
+                    side: BorderSide.none,
+                  )).toList(),
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTechniciansSection() {
+    final theme = Theme.of(context);
+
+    return SectionCard(
+      title: 'Técnicos Presentes',
+      icon: Icons.engineering_outlined,
+      actions: [
+        TextButton.icon(
+          onPressed: _openTechniciansSelector,
+          icon: _isLoadingTechnicians
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.add_circle_outline, size: 18),
+          label: const Text('Adicionar'),
+        ),
+      ],
+      child: InkWell(
+        onTap: _openTechniciansSelector,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.18),
+          ),
+          child: _selectedTechnicians.isEmpty
+              ? Row(
+                  children: [
+                    Icon(Icons.person_add_alt_1_outlined, color: theme.colorScheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Selecionar técnicos',
+                        style: TextStyle(fontSize: 16, color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                )
+              : Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _selectedTechnicians.map((technician) => Chip(
+                    avatar: Icon(
+                      Icons.person_rounded,
+                      size: 16,
+                      color: theme.colorScheme.onSecondaryContainer,
+                    ),
+                    label: Text(technician, style: const TextStyle(fontSize: 12)),
+                    backgroundColor: theme.colorScheme.secondaryContainer,
+                    side: BorderSide.none,
+                  )).toList(),
+                ),
+        ),
+      ),
+    );
+  }
+
+  void _openTechniciansSelector() {
+    if (_isLoadingTechnicians) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Carregando técnicos...')),
+      );
+      return;
+    }
+
+    if (_availableTechnicians.isEmpty && _techniciansLoadError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao carregar técnicos da aba Técnicos: $_techniciansLoadError'),
+          action: SnackBarAction(
+            label: 'Tentar novamente',
+            onPressed: _loadTechnicians,
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (_availableTechnicians.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Nenhum técnico encontrado na aba Técnicos.'),
+          action: SnackBarAction(
+            label: 'Recarregar',
+            onPressed: _loadTechnicians,
+          ),
+        ),
+      );
+      return;
+    }
+
+    final setOfNames = _availableTechnicians
+        .map((t) => t.name.trim())
+        .where((name) => name.isNotEmpty)
+        .toSet();
+
+    // Preservar técnicos antigos selecionados mesmo se não estiverem na lista atual
+    for (var existingName in _selectedTechnicians) {
+      if (existingName.trim().isNotEmpty) {
+        setOfNames.add(existingName.trim());
+      }
+    }
+
+    final technicianNames = setOfNames.toList()
+      ..sort((a, b) => _normalize(a).compareTo(_normalize(b)));
+
+    _openMultiSelect(
+      'Técnico(s)',
+      technicianNames,
+      _selectedTechnicians,
+      (res) => _selectedTechnicians = res,
     );
   }
 
@@ -1026,6 +1089,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
 
     return SectionCard(
       title: 'Responsável',
+      icon: Icons.badge_outlined,
       child: LayoutBuilder(
         builder: (context, constraints) {
           return Autocomplete<EmployeeModel>(
@@ -1107,6 +1171,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
   Widget _buildObservationsSection() {
     return SectionCard(
       title: 'Diagnóstico / Observações',
+      icon: Icons.notes_outlined,
       child: TextFormField(
         controller: _observationsController,
         maxLines: 5,
@@ -1131,10 +1196,16 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
     final theme = Theme.of(context);
     final isLargeScreen = MediaQuery.of(context).size.width > 600;
     final bool canUseCamera = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+    final photoCount = _selectedPhotos.length;
 
     return SectionCard(
       title: 'Anexos Fotográficos',
+      icon: Icons.photo_library_outlined,
+      actions: [
+        _buildPhotoCountChip(photoCount),
+      ],
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (isLargeScreen)
             Row(
@@ -1143,7 +1214,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                   Expanded(child: _buildPhotoButton(Icons.camera_alt_outlined, 'Câmera', ImageSource.camera)),
                   const SizedBox(width: 16),
                 ],
-                Expanded(child: _buildPhotoButton(Icons.photo_library_outlined, 'Galeria', ImageSource.gallery)),
+                Expanded(child: _buildPhotoButton(Icons.add_photo_alternate_outlined, 'Adicionar Foto', ImageSource.gallery)),
               ],
             )
           else ...[
@@ -1151,10 +1222,10 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
               _buildPhotoButton(Icons.camera_alt_outlined, 'Câmera', ImageSource.camera),
               const SizedBox(height: 12),
             ],
-            _buildPhotoButton(Icons.photo_library_outlined, 'Galeria', ImageSource.gallery),
+            _buildPhotoButton(Icons.add_photo_alternate_outlined, 'Adicionar Foto', ImageSource.gallery),
           ],
           if (_selectedPhotos.isNotEmpty) ...[
-            const SizedBox(height: 24),
+            const SizedBox(height: 18),
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -1207,6 +1278,24 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
         padding: const EdgeInsets.symmetric(vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         minimumSize: const Size(double.infinity, 50),
+      ),
+    );
+  }
+
+  Widget _buildPhotoCountChip(int count) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '$count foto(s)',
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: colorScheme.onPrimaryContainer,
+              fontWeight: FontWeight.w800,
+            ),
       ),
     );
   }
@@ -1293,6 +1382,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
 
     return SectionCard(
       title: _isTechnicalAnalysis ? 'Assinatura do Técnico' : 'Assinatura do Responsável',
+      icon: Icons.draw_outlined,
       child: Column(
         children: [
           if (widget.existingReport != null && widget.existingReport!.signatureBytes != null && _signatureController.isEmpty)
@@ -1365,27 +1455,89 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
   }
 
   Widget _buildSubmitButton() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24.0),
-      child: PrimaryActionButton(
-        label: widget.existingReport != null ? 'Atualizar Relatório' : 'Salvar Relatório',
-        icon: Icons.save_rounded,
-        onPressed: _submitData,
+    final theme = Theme.of(context);
+    final isLargeScreen = MediaQuery.of(context).size.width > 600;
+
+    final saveButton = PrimaryActionButton(
+      label: widget.existingReport != null ? 'Atualizar Relatório' : 'Salvar Relatório',
+      icon: Icons.save_rounded,
+      onPressed: _submitData,
+    );
+
+    final backButton = OutlinedButton.icon(
+      onPressed: () => Navigator.of(context).maybePop(),
+      icon: const Icon(Icons.arrow_back_rounded),
+      label: const Text('Voltar'),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(double.infinity, 52),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+
+    return SectionCard(
+      title: 'Ações Finais',
+      icon: Icons.task_alt_outlined,
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.45),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.cloud_queue_rounded, color: theme.colorScheme.primary, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Sem conexão, o relatório será mantido como pendente para sincronizar depois.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (isLargeScreen)
+            Row(
+              children: [
+                Expanded(child: backButton),
+                const SizedBox(width: 12),
+                Expanded(flex: 2, child: saveButton),
+              ],
+            )
+          else ...[
+            saveButton,
+            const SizedBox(height: 12),
+            backButton,
+          ],
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isLargeScreen = MediaQuery.of(context).size.width > 700;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Formulário de Relatório'),
       ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 860),
+          constraints: const BoxConstraints(maxWidth: 920),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
+            padding: EdgeInsets.all(isLargeScreen ? 24.0 : 16.0),
             child: Form(
               key: _formKey,
               child: Column(
@@ -1394,7 +1546,8 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                   _buildHeader(),
                   _buildDateSection(),
                   _buildSchoolSection(),
-                  _buildSubjectsAndTechniciansSection(),
+                  _buildSubjectsSection(),
+                  _buildTechniciansSection(),
                   _buildResponsibleSection(),
                   _buildObservationsSection(),
                   _buildPhotosSection(),
