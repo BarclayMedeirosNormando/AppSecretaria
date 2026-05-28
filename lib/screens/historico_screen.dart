@@ -86,15 +86,35 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     if (_searchQuery.isEmpty) {
       _filtered = List.from(_allHistory);
     } else {
-      final q = _searchQuery.toLowerCase();
+      final q = _normalizeSearchText(_searchQuery);
       _filtered = _allHistory.where((h) {
-        final numRel = _safeReportNumber(h).toLowerCase();
-        final escola = (h['escola']?.toString() ?? '').toLowerCase();
-        final usuario = (h['usuario']?.toString() ?? '').toLowerCase();
-        final editado = (h['editadoPor']?.toString() ?? '').toLowerCase();
-        return numRel.contains(q) || escola.contains(q) || usuario.contains(q) || editado.contains(q);
+        final searchable = _normalizeSearchText([
+          _safeReportNumber(h),
+          h['escola'],
+          h['schoolName'],
+          h['usuario'],
+          h['editadoPor'],
+          h['tecnicos'],
+          h['technicians'],
+          h['Técnicos Presentes'],
+          h['Tecnicos Presentes'],
+        ].whereType<Object>().join(' '));
+        return searchable.contains(q);
       }).toList();
     }
+  }
+
+  String _normalizeSearchText(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[áàâãä]'), 'a')
+        .replaceAll(RegExp(r'[éèêë]'), 'e')
+        .replaceAll(RegExp(r'[íìîï]'), 'i')
+        .replaceAll(RegExp(r'[óòôõö]'), 'o')
+        .replaceAll(RegExp(r'[úùûü]'), 'u')
+        .replaceAll('ç', 'c')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   String _safeReportNumber(Map<String, dynamic> h) {
@@ -518,7 +538,7 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                 AppSearchField(
                   controller: _searchController,
                   label: 'Buscar histórico',
-                  hint: 'Escola, nº do relatório ou usuário',
+                  hint: 'Número, escola, técnico ou usuário',
                   onChanged: (v) => setState(() {
                     _searchQuery = v;
                     _applyFilter();
@@ -592,10 +612,10 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     final hasQuery = _searchQuery.isNotEmpty;
     return EmptyState(
       icon: hasQuery ? Icons.search_off_rounded : Icons.history_toggle_off_rounded,
-      title: hasQuery ? 'Nenhum resultado encontrado' : 'Histórico vazio',
+      title: hasQuery ? 'Nenhum resultado encontrado' : 'Nenhum histórico encontrado',
       message: hasQuery
           ? 'Nenhum registro corresponde a "$_searchQuery".\nTente outros termos.'
-          : 'Ainda não há registros de alterações no sistema.',
+          : 'As versões editadas dos relatórios aparecerão aqui.',
       actionLabel: !hasQuery ? 'Atualizar' : null,
       onAction: !hasQuery ? _loadHistory : null,
       actionIcon: Icons.refresh_rounded,
@@ -608,21 +628,22 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     // Busca escola e editor da versão mais recente que tenha o campo preenchido
     final escola = versions
             .map((v) => v['escola']?.toString().trim() ?? '')
-            .firstWhere((s) => s.isNotEmpty, orElse: () => '—');
+            .firstWhere((s) => s.isNotEmpty, orElse: () => 'Escola não informada');
     final editadoPor = versions
             .map((v) => (v['editadoPor'] ?? v['usuario'] ?? '').toString().trim())
-            .firstWhere((s) => s.isNotEmpty, orElse: () => '—');
+            .firstWhere((s) => s.isNotEmpty, orElse: () => 'Não informado');
     final dataSnap = _fmt(latest['dataSnapshot']);
 
     return Card(
       elevation: 0,
-      margin: const EdgeInsets.only(bottom: 10),
+      color: colorScheme.surface,
+      margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         onTap: () {
           setState(() {
             _selectedReportNumber = reportNumber;
@@ -630,15 +651,28 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
         },
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              Container(
+                width: 42,
+                height: 42,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.62),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.history_edu_rounded, color: colorScheme.primary, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 6,
                       children: [
                         Text(
                           reportNumber,
@@ -648,57 +682,39 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                             color: colorScheme.primary,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          escola,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: colorScheme.onSurface,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        _buildChip(
+                          versions.length == 1 ? '1 versão' : '${versions.length} versões',
+                          colorScheme.primaryContainer,
+                          colorScheme.onPrimaryContainer,
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  _buildChip(
-                    versions.length == 1 ? '1 versão' : '${versions.length} versões',
-                    colorScheme.primaryContainer,
-                    colorScheme.onPrimaryContainer,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Divider(height: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: Row(
+                    const SizedBox(height: 8),
+                    Text(
+                      'Escola: $escola',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: colorScheme.onSurface,
+                        height: 1.25,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 6,
                       children: [
-                        Icon(Icons.person_outline_rounded, size: 14, color: colorScheme.onSurfaceVariant),
-                        const SizedBox(width: 5),
-                        Flexible(
-                          child: Text(
-                            'Alt: $editadoPor',
-                            style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
+                        _buildMetaText(Icons.person_outline_rounded, editadoPor),
+                        _buildMetaText(Icons.access_time_rounded, dataSnap),
                       ],
                     ),
-                  ),
-                  Row(
-                    children: [
-                      Icon(Icons.access_time_rounded, size: 14, color: colorScheme.onSurfaceVariant),
-                      const SizedBox(width: 5),
-                      Text(dataSnap, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
-                    ],
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded, color: colorScheme.onSurfaceVariant),
             ],
           ),
         ),
@@ -706,24 +722,52 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     );
   }
 
-  Widget _buildVersionCard(Map<String, dynamic> h) {
+  Widget _buildMetaText(IconData icon, String text) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: colorScheme.onSurfaceVariant),
+        const SizedBox(width: 5),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 240),
+          child: Text(
+            text,
+            style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVersionCard(Map<String, dynamic> h, {required bool isLatest}) {
     final colorScheme = Theme.of(context).colorScheme;
     final versao = h['versao'] ?? '';
-    final editadoPor = h['editadoPor'] ?? '—';
+    final editadoPor = (h['editadoPor'] ?? h['usuario'] ?? '—').toString();
     final dataSnap = _fmt(h['dataSnapshot']);
-    final tipo = h['tipo'] ?? '';
+    final tipo = (h['tipo'] ?? h['tipo_relatorio'] ?? '').toString();
     final dataVisita = _fmtDate(h['dataVisita']);
-    final motivos = h['motivos'] ?? '';
+    final motivos = JsonUtils.asString(h['motivos'] ?? h['subjects'] ?? h['Motivos / Assuntos']);
+    final escola = JsonUtils.asString(h['escola'] ?? h['schoolName']);
+    final tecnicos = JsonUtils.asString(h['tecnicos'] ?? h['technicians'] ?? h['Técnicos Presentes'] ?? h['Tecnicos Presentes']);
 
     return Card(
       elevation: 0,
-      margin: const EdgeInsets.only(bottom: 10),
+      color: isLatest
+          ? colorScheme.primaryContainer.withValues(alpha: 0.12)
+          : colorScheme.surface,
+      margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: isLatest
+              ? colorScheme.primary.withValues(alpha: 0.32)
+              : colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         onTap: () => _showDetail(h),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -734,12 +778,14 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
-                          versao.isNotEmpty
-                              ? 'Versão v${versao.replaceFirst(RegExp(r'^v', caseSensitive: false), '')}'
+                          versao.toString().isNotEmpty
+                              ? 'Versão v${versao.toString().replaceFirst(RegExp(r'^v', caseSensitive: false), '')}'
                               : 'Versão não especificada',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
@@ -747,68 +793,87 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                             color: colorScheme.primary,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Visita: $dataVisita',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: colorScheme.onSurface,
+                        if (isLatest)
+                          _buildChip(
+                            'Mais recente',
+                            Colors.green.withValues(alpha: 0.14),
+                            Colors.green.shade700,
                           ),
-                        ),
+                        if (tipo.isNotEmpty)
+                          _buildChip(
+                            tipo,
+                            tipo.toLowerCase().contains('tecnico') || tipo.toLowerCase().contains('técnico')
+                                ? colorScheme.secondaryContainer
+                                : colorScheme.tertiaryContainer,
+                            tipo.toLowerCase().contains('tecnico') || tipo.toLowerCase().contains('técnico')
+                                ? colorScheme.onSecondaryContainer
+                                : colorScheme.onTertiaryContainer,
+                          ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  if (tipo.isNotEmpty)
-                    _buildChip(
-                      tipo,
-                      tipo == 'Tecnico' ? colorScheme.secondaryContainer : colorScheme.tertiaryContainer,
-                      tipo == 'Tecnico' ? colorScheme.onSecondaryContainer : colorScheme.onTertiaryContainer,
-                    ),
+                  IconButton(
+                    tooltip: 'Ver detalhes',
+                    onPressed: () => _showDetail(h),
+                    icon: const Icon(Icons.open_in_new_rounded),
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
-              if (motivos.toString().isNotEmpty) ...[
-                Text(
-                  'Motivos: $motivos',
-                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-              ],
-              Divider(height: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-              const SizedBox(height: 10),
-              Row(
+              if (escola.isNotEmpty)
+                _buildInlineInfo(Icons.school_outlined, escola, highlight: true),
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
                 children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Icon(Icons.edit_outlined, size: 14, color: colorScheme.onSurfaceVariant),
-                        const SizedBox(width: 5),
-                        Flexible(
-                          child: Text(
-                            'Por: $editadoPor',
-                            style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Icon(Icons.access_time_rounded, size: 14, color: colorScheme.onSurfaceVariant),
-                      const SizedBox(width: 5),
-                      Text(dataSnap, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
-                    ],
-                  ),
+                  _buildMetaText(Icons.event_rounded, 'Visita: $dataVisita'),
+                  _buildMetaText(Icons.access_time_rounded, 'Alterado: $dataSnap'),
+                  _buildMetaText(Icons.edit_outlined, 'Por: $editadoPor'),
                 ],
               ),
+              if (tecnicos.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _buildInlineInfo(Icons.engineering_outlined, tecnicos),
+              ],
+              if (motivos.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _buildInlineInfo(Icons.list_alt_rounded, motivos),
+              ],
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildInlineInfo(IconData icon, String text, {bool highlight = false}) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            size: 15,
+            color: highlight ? colorScheme.primary : colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: highlight ? 13 : 12,
+                color: highlight ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
+                fontWeight: highlight ? FontWeight.w700 : FontWeight.normal,
+                height: 1.25,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -859,7 +924,10 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
               itemCount: versions.length,
-              itemBuilder: (ctx, i) => _buildVersionCard(versions[i]),
+              itemBuilder: (ctx, i) => _buildVersionCard(
+                versions[i],
+                isLatest: i == 0,
+              ),
             ),
           ),
         ),
