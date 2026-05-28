@@ -312,15 +312,19 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _login() async {
+    if (_isLoading) return;
+
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
       });
 
       // Baixa as senhas atualizadas da nuvem ANTES de verificar
+      var syncFailed = false;
       try {
         await TechnicianService().syncTechniciansFromCloud();
       } catch (e) {
+        syncFailed = true;
         debugPrint('Erro ao sincronizar técnicos no login: $e');
       }
 
@@ -357,145 +361,180 @@ class _LoginScreenState extends State<LoginScreen> {
           setState(() {
             _isLoading = false;
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('E-mail ou senha incorretos.'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
+          final message = syncFailed && tecnicos.isEmpty
+              ? 'Não foi possível conectar ao servidor.'
+              : 'E-mail ou senha incorretos.';
+          _showLoginError(message);
         }
       }
     }
+  }
+
+  void _showLoginError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Theme.of(context).colorScheme.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final size = MediaQuery.of(context).size;
+    final isWide = size.width >= 700;
 
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              colorScheme.primaryContainer.withValues(alpha: 0.3),
-              colorScheme.surface,
-            ],
-          ),
-        ),
+      body: DecoratedBox(
+        decoration: BoxDecoration(color: colorScheme.surface),
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Card(
-                  elevation: 4,
-                  shadowColor: colorScheme.shadow.withValues(alpha: 0.25),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Center(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isWide ? 32 : 20,
+                    vertical: 24,
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(32.0),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 460),
+                    child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Align(
-                            alignment: Alignment.center,
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: colorScheme.primaryContainer,
-                              ),
-                              child: Icon(
-                                Icons.assignment_ind_rounded,
-                                size: 64,
-                                color: colorScheme.primary,
+                          Card(
+                            elevation: 6,
+                            shadowColor: colorScheme.shadow.withValues(alpha: 0.18),
+                            color: colorScheme.surfaceContainerLowest,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              side: BorderSide(
+                                color: colorScheme.outlineVariant.withValues(alpha: 0.45),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 24),
-                          Text(
-                            'Nexus Relatórios',
-                            textAlign: TextAlign.center,
-                            style: textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: colorScheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Rede Estadual da Paraíba',
-                            textAlign: TextAlign.center,
-                            style: textTheme.titleMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Acesse sua conta para continuar',
-                            textAlign: TextAlign.center,
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-                          CustomTextField(
-                            label: 'E-mail',
-                            controller: _emailController,
-                            prefixIcon: Icons.email_outlined,
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                            validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return 'Por favor, insira seu e-mail';
-                              }
-                              final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
-                              if (!emailRegex.hasMatch(value.trim())) {
-                                return 'Insira um e-mail válido';
-                              }
-                              return null;
-                            },
-                          ),
-                          CustomTextField(
-                            label: 'Senha',
-                            controller: _passwordController,
-                            prefixIcon: Icons.lock_outline_rounded,
-                            obscureText: _obscurePassword,
-                            textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (_) => _login(),
-                            suffixIcon: Tooltip(
-                              message: _obscurePassword ? 'Mostrar senha' : 'Ocultar senha',
-                              child: IconButton(
-                                icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                                onPressed: () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
+                            child: Padding(
+                              padding: EdgeInsets.all(isWide ? 36.0 : 24.0),
+                              child: Form(
+                                key: _formKey,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Align(
+                                      alignment: Alignment.center,
+                                      child: Container(
+                                        width: 74,
+                                        height: 74,
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.primaryContainer.withValues(alpha: 0.7),
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(
+                                            color: colorScheme.primary.withValues(alpha: 0.16),
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          Icons.account_balance_outlined,
+                                          size: 38,
+                                          color: colorScheme.primary,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    Text(
+                                      'Nexus Relatórios',
+                                      textAlign: TextAlign.center,
+                                      style: textTheme.headlineMedium?.copyWith(
+                                        fontWeight: FontWeight.w900,
+                                        color: colorScheme.onSurface,
+                                        letterSpacing: 0,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Gestão de Relatórios Escolares',
+                                      textAlign: TextAlign.center,
+                                      style: textTheme.titleSmall?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Acesse sua conta para continuar',
+                                      textAlign: TextAlign.center,
+                                      style: textTheme.bodySmall?.copyWith(
+                                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.82),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 30),
+                                    CustomTextField(
+                                      label: 'E-mail',
+                                      controller: _emailController,
+                                      prefixIcon: Icons.email_outlined,
+                                      keyboardType: TextInputType.emailAddress,
+                                      textInputAction: TextInputAction.next,
+                                      validator: (value) {
+                                        if (value == null || value.trim().isEmpty) {
+                                          return 'Informe o e-mail.';
+                                        }
+                                        final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
+                                        if (!emailRegex.hasMatch(value.trim())) {
+                                          return 'Informe um e-mail válido.';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                    CustomTextField(
+                                      label: 'Senha',
+                                      controller: _passwordController,
+                                      prefixIcon: Icons.lock_outline_rounded,
+                                      obscureText: _obscurePassword,
+                                      textInputAction: TextInputAction.done,
+                                      onFieldSubmitted: (_) {
+                                        if (!_isLoading) _login();
+                                      },
+                                      suffixIcon: Tooltip(
+                                        message: _obscurePassword ? 'Mostrar senha' : 'Ocultar senha',
+                                        child: IconButton(
+                                          icon: Icon(
+                                            _obscurePassword
+                                                ? Icons.visibility_outlined
+                                                : Icons.visibility_off_outlined,
+                                          ),
+                                          onPressed: _isLoading
+                                              ? null
+                                              : () {
+                                                  setState(() {
+                                                    _obscurePassword = !_obscurePassword;
+                                                  });
+                                                },
+                                        ),
+                                      ),
+                                      validator: (value) {
+                                        if (value == null || value.isEmpty) {
+                                          return 'Informe a senha.';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                    const SizedBox(height: 28),
+                                    PrimaryActionButton(
+                                      label: 'Entrar',
+                                      icon: Icons.login_rounded,
+                                      isLoading: _isLoading,
+                                      onPressed: _login,
+                                      height: 54,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Por favor, insira sua senha';
-                              }
-                              return null;
-                            },
                           ),
-                          const SizedBox(height: 32),
-                          PrimaryActionButton(
-                            label: 'Entrar',
-                            icon: Icons.login_rounded,
-                            isLoading: _isLoading,
-                            onPressed: _login,
-                          ),
-                          const SizedBox(height: 32),
+                          const SizedBox(height: 18),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -518,9 +557,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                ),
-              ),
-            ),
+                );
+            },
           ),
         ),
       ),
