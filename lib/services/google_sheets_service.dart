@@ -148,12 +148,11 @@ class GoogleSheetsService {
     debugPrint('Payload inep: ${report.schoolInep}');
 
     try {
-      // Tenta enviar para a internet (com timeout de 60 segundos)
-      final response = await http.post(
+      // Tenta enviar para a internet seguindo redirects do Apps Script.
+      final response = await _postAppsScript(
         Uri.parse(_scriptUrl),
-        headers: _jsonHeaders,
-        body: jsonEncode(data),
-      ).timeout(const Duration(seconds: 60));
+        payload: data,
+      );
 
       if (response.statusCode == 200 || response.statusCode == 302) {
         final decoded = _parseAndValidateResponse(response);
@@ -192,11 +191,10 @@ class GoogleSheetsService {
       'escola': report.schoolName,
     };
     try {
-      final response = await http.post(
+      final response = await _postAppsScript(
         Uri.parse(_scriptUrl),
-        headers: _jsonHeaders,
-        body: jsonEncode(data),
-      ).timeout(const Duration(seconds: 30));
+        payload: data,
+      );
       if (response.statusCode == 200 || response.statusCode == 302) {
         final decoded = _parseAndValidateResponse(response);
         if (_isSuccess(decoded)) {
@@ -818,9 +816,9 @@ class GoogleSheetsService {
   }
 
   /// Tenta enviar uma operação individual para o Apps Script
-  Future<void> _sendOperation(Map<String, dynamic> op) async {
+  Future<Map<String, dynamic>> _sendOperation(Map<String, dynamic> op) async {
     final decoded = await _postJson(op, timeout: const Duration(seconds: 40));
-    if (!_isSuccess(decoded)) {
+    if (!_isSuccessResponse(decoded)) {
       final msg = decoded['message']?.toString() ?? '';
       final action = op['acao']?.toString() ?? '';
       
@@ -828,24 +826,111 @@ class GoogleSheetsService {
       if (action == 'deletar_relatorio' && 
           (msg.toLowerCase().contains('não encontrado') || msg.toLowerCase().contains('nao encontrado'))) {
         debugPrint('Deleção offline: Relatório já não existe no Sheets. Tratando como sucesso.');
-        return;
+        return {
+          'status': 'success',
+          'success': true,
+          'message': msg,
+        };
       }
       
       throw Exception(msg.isNotEmpty ? msg : 'Erro desconhecido no Apps Script');
+    }
+    return decoded;
+  }
+
+  bool _sameQueueItem(Map<String, dynamic> a, Map<String, dynamic> b) {
+    return a['id']?.toString() == b['id']?.toString() &&
+        a['acao']?.toString() == b['acao']?.toString() &&
+        a['acao_tipo']?.toString() == b['acao_tipo']?.toString();
+  }
+
+  Future<List<Map<String, dynamic>>> _removeReportsAlreadyInSheets(
+    List<Map<String, dynamic>> queue,
+  ) async {
+    final candidateIds = queue
+        .map((op) => op['id']?.toString().trim() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    if (candidateIds.isEmpty) return queue;
+
+    try {
+      final cloudReports = await fetchReports();
+      final cloudIds = cloudReports.map((report) => report.id.trim()).toSet();
+      return queue.where((op) {
+        final action = op['acao']?.toString() ?? '';
+        final id = op['id']?.toString().trim() ?? '';
+        if (action != 'deletar_relatorio' && cloudIds.contains(id)) {
+          debugPrint('Relatorio $id ja existe no Sheets. Removendo da fila offline.');
+          return false;
+        }
+        if (action == 'deletar_relatorio' && !cloudIds.contains(id)) {
+          debugPrint('Relatorio $id ja nao existe no Sheets. Removendo delete da fila offline.');
+          return false;
+        }
+        return true;
+      }).toList();
+    } catch (e) {
+      debugPrint('Nao foi possivel confirmar relatorios ja enviados no Sheets: $e');
+      return queue;
+    }
+  }
+
+  Future<void> _markLocalReportsSynced(Set<String> syncedIds) async {
+    if (syncedIds.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final reportsJson = prefs.getString('local_reports');
+    if (reportsJson == null || reportsJson.trim().isEmpty) return;
+
+    try {
+      final decoded = jsonDecode(reportsJson);
+      if (decoded is! List) return;
+
+      var changed = false;
+      final now = DateTime.now();
+      final updatedReports = <Map<String, dynamic>>[];
+
+      for (final item in decoded) {
+        if (item is! Map) continue;
+
+        final map = Map<String, dynamic>.from(item);
+        final id = map['id']?.toString().trim() ?? '';
+        if (syncedIds.contains(id)) {
+          map['syncStatus'] = 'synced';
+          map['lastSyncedAt'] = now.toIso8601String();
+          map.remove('pending');
+          map.remove('isPending');
+          map.remove('needsSync');
+          changed = true;
+        }
+        updatedReports.add(map);
+      }
+
+      if (changed) {
+        await prefs.setString('local_reports', jsonEncode(updatedReports));
+        debugPrint('local_reports atualizado como synced para IDs: $syncedIds');
+      }
+    } catch (e) {
+      debugPrint('Erro ao marcar local_reports como sincronizado: $e');
     }
   }
 
   /// Sincroniza a fila offline enviando item a item
   Future<void> syncOfflineData() async {
     final queue = await normalizeOfflineQueue();
+    debugPrint('Fila offline antes: ${queue.length}');
 
     if (queue.isEmpty) {
+      debugPrint('Fila offline depois: 0');
+      debugPrint('Contador final: 0');
       debugPrint('Nenhum relatório pendente de sincronização.');
       return;
     }
 
     debugPrint('Tentando sincronizar ${queue.length} relatórios offline...');
-    final remaining = <Map<String, dynamic>>[];
+    var remaining = List<Map<String, dynamic>>.from(queue);
+    final syncedIds = <String>{};
 
     for (final op in queue) {
       final id = op['id']?.toString() ?? '';
@@ -854,21 +939,136 @@ class GoogleSheetsService {
       debugPrint('Syncing op: Action=$action, Type=$type, ID=$id');
 
       try {
-        await _sendOperation(op);
-        debugPrint('Op $id sincronizada com sucesso!');
+        final decoded = await _sendOperation(op);
+        debugPrint('RESPOSTA APPS SCRIPT SYNC: $decoded');
+        debugPrint('STATUS: ${decoded['status']}');
+        debugPrint('SUCCESS: ${decoded['success']}');
+        debugPrint('RESULTS: ${decoded['results']}');
+        debugPrint('Resposta sync offline: $decoded');
+        if (_isSuccessResponse(decoded)) {
+          remaining.removeWhere((item) => _sameQueueItem(item, op));
+          if (action != 'deletar_relatorio' && id.isNotEmpty) {
+            syncedIds.add(id);
+          }
+          await _markLocalReportsSynced(syncedIds);
+          await _saveOfflineQueue(remaining);
+          debugPrint('Op $id sincronizada com sucesso!');
+        }
       } catch (e) {
         debugPrint('Falha ao sincronizar op $id: $e');
-        remaining.add(op);
       }
     }
 
+    final beforeReconcileIds = remaining
+        .where((op) => op['acao']?.toString() != 'deletar_relatorio')
+        .map((op) => op['id']?.toString().trim() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    remaining = await _removeReportsAlreadyInSheets(remaining);
+    final afterReconcileIds = remaining
+        .where((op) => op['acao']?.toString() != 'deletar_relatorio')
+        .map((op) => op['id']?.toString().trim() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    syncedIds.addAll(beforeReconcileIds.difference(afterReconcileIds));
+    await _markLocalReportsSynced(syncedIds);
     await _saveOfflineQueue(remaining);
+    final count = await getPendingSyncCount();
+    debugPrint('Fila offline depois: ${remaining.length}');
+    debugPrint('Contador final: $count');
     debugPrint('Sync remaining length: ${remaining.length}');
     debugPrint('Sincronização offline concluída. Pendências restantes: ${remaining.length}');
   }
 
-  /// Limpa chaves legadas e antigas do SharedPreferences (método público mantido
-  /// por compatibilidade — delega ao helper privado).
+  /// Aliases mantidos para chamadas antigas de sincronizacao offline.
+  Future<void> syncOfflineQueue() => syncOfflineData();
+
+  Future<void> syncPendingReports() => syncOfflineData();
+
+  Future<void> syncReportsBatch() async {
+    final queue = await normalizeOfflineQueue();
+    debugPrint('Fila offline antes: ${queue.length}');
+
+    if (queue.isEmpty) {
+      debugPrint('Fila offline depois: 0');
+      debugPrint('Contador final: 0');
+      debugPrint('Nenhum relatorio pendente de sincronizacao em lote.');
+      return;
+    }
+
+    try {
+      final decoded = await _postJson({
+        'action': 'syncReportsBatch',
+        'reports': queue,
+      }, timeout: const Duration(seconds: 80));
+      debugPrint('RESPOSTA APPS SCRIPT SYNC: $decoded');
+      debugPrint('STATUS: ${decoded['status']}');
+      debugPrint('SUCCESS: ${decoded['success']}');
+      debugPrint('RESULTS: ${decoded['results']}');
+      debugPrint('Resposta sync offline: $decoded');
+
+      List<Map<String, dynamic>> remaining;
+      if (_isSuccessResponse(decoded)) {
+        remaining = [];
+      } else {
+        remaining = _failedBatchItems(queue, decoded);
+        remaining = await _removeReportsAlreadyInSheets(remaining);
+      }
+
+      final remainingIds = remaining
+          .where((op) => op['acao']?.toString() != 'deletar_relatorio')
+          .map((op) => op['id']?.toString().trim() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      final syncedIds = queue
+          .where((op) => op['acao']?.toString() != 'deletar_relatorio')
+          .map((op) => op['id']?.toString().trim() ?? '')
+          .where((id) => id.isNotEmpty && !remainingIds.contains(id))
+          .toSet();
+      await _markLocalReportsSynced(syncedIds);
+      await _saveOfflineQueue(remaining);
+      final count = await getPendingSyncCount();
+      debugPrint('Fila offline depois: ${remaining.length}');
+      debugPrint('Contador final: $count');
+    } catch (e) {
+      debugPrint('Falha ao sincronizar lote offline: $e');
+      rethrow;
+    }
+  }
+
+  List<Map<String, dynamic>> _failedBatchItems(
+    List<Map<String, dynamic>> queue,
+    Map<String, dynamic> decoded,
+  ) {
+    final results = decoded['results'];
+    if (results is! List || results.isEmpty) return queue;
+
+    final failed = <Map<String, dynamic>>[];
+    final queueById = {
+      for (final item in queue)
+        if ((item['id']?.toString().trim() ?? '').isNotEmpty)
+          item['id'].toString().trim(): item,
+    };
+
+    for (var i = 0; i < results.length; i++) {
+      final item = results[i];
+      if (_isSuccessResponse(item)) continue;
+
+      Map<String, dynamic>? failedOp;
+      if (item is Map) {
+        final id = (item['id'] ?? item['reportId'] ?? item['report_id'])?.toString().trim();
+        if (id != null && id.isNotEmpty) {
+          failedOp = queueById[id];
+        }
+      }
+      failed.add(failedOp ?? (i < queue.length ? queue[i] : queue.last));
+    }
+
+    return failed;
+  }
+
+  /// Limpa chaves legadas e antigas do SharedPreferences (metodo publico mantido
+  /// por compatibilidade, delega ao helper privado).
   Future<void> cleanupLegacyOfflineQueueKeys() async {
     final prefs = await SharedPreferences.getInstance();
     await _cleanupLegacyKeys(prefs);
@@ -878,36 +1078,106 @@ class GoogleSheetsService {
     Map<String, dynamic> data, {
     Duration timeout = const Duration(seconds: 60),
   }) async {
-    var request = http.Request('POST', Uri.parse(_scriptUrl));
-    request.headers.addAll(_jsonHeaders);
-    request.body = jsonEncode(data);
-    request.followRedirects = false;
+    final response = await _postAppsScript(
+      Uri.parse(_scriptUrl),
+      payload: data,
+      timeout: timeout,
+    );
 
+    if (response.statusCode == 200 ||
+        response.statusCode == 302 ||
+        response.statusCode == 301 ||
+        response.statusCode == 303) {
+      return _parseAndValidateResponse(response);
+    }
+    throw Exception('Erro HTTP ${response.statusCode}');
+  }
+
+  String? _extractRedirectUrlFromHtml(String html) {
+    final match = RegExp(r'href="([^"]+)"').firstMatch(html);
+    if (match == null) return null;
+
+    return match.group(1)?.replaceAll('&amp;', '&');
+  }
+
+  Future<http.Response> _postAppsScript(
+    Uri uri, {
+    required Map<String, dynamic> payload,
+    Duration timeout = const Duration(seconds: 45),
+  }) async {
     final client = http.Client();
+
     try {
-      var streamedResponse = await client.send(request).timeout(timeout);
-      var response = await http.Response.fromStream(streamedResponse);
-      http.Response finalResponse = response;
+      final request = http.Request('POST', uri)
+        ..headers.addAll(_jsonHeaders)
+        ..body = jsonEncode(payload)
+        ..followRedirects = false;
 
-      if (response.statusCode == 302 || response.statusCode == 303) {
-        final location = response.headers['location'];
-        if (location != null) {
-          finalResponse = await http.get(Uri.parse(location)).timeout(timeout);
+      final streamed = await client.send(request).timeout(timeout);
+      var response = await http.Response.fromStream(streamed);
+
+      debugPrint('Apps Script status inicial: ${response.statusCode}');
+
+      if (response.statusCode == 302 ||
+          response.statusCode == 301 ||
+          response.statusCode == 303) {
+        var location = response.headers['location'];
+        location ??= _extractRedirectUrlFromHtml(utf8.decode(response.bodyBytes));
+
+        debugPrint('Apps Script redirect location: $location');
+
+        if (location != null && location.isNotEmpty) {
+          final redirectUri = Uri.parse(location);
+          final redirectedRequest = http.Request('GET', redirectUri)
+            ..followRedirects = true;
+
+          final redirectedStream = await client
+              .send(redirectedRequest)
+              .timeout(timeout);
+
+          response = await http.Response.fromStream(redirectedStream);
         }
+      } else {
+        debugPrint('Apps Script redirect location: null');
       }
 
-      if (finalResponse.statusCode == 200 || finalResponse.statusCode == 302) {
-        return _parseAndValidateResponse(finalResponse);
-      }
-      throw Exception('Erro HTTP ${finalResponse.statusCode}');
+      final body = utf8.decode(response.bodyBytes);
+      debugPrint('Apps Script status final: ${response.statusCode}');
+      debugPrint('Apps Script body final: ${body.length > 1000 ? body.substring(0, 1000) : body}');
+
+      return response;
     } finally {
       client.close();
     }
   }
 
+  bool _isSuccessResponse(dynamic decoded) {
+    if (decoded is! Map) return false;
+
+    final status = decoded['status']?.toString().toLowerCase().trim();
+    final success = decoded['success'];
+
+    if (status == 'success') return true;
+    if (success == true) return true;
+    if (success?.toString().toLowerCase() == 'true') return true;
+
+    final results = decoded['results'];
+    if (results is List && results.isNotEmpty) {
+      return results.every((item) {
+        if (item is! Map) return false;
+        final itemStatus = item['status']?.toString().toLowerCase().trim();
+        final itemSuccess = item['success'];
+        return itemStatus == 'success' ||
+            itemSuccess == true ||
+            itemSuccess?.toString().toLowerCase() == 'true';
+      });
+    }
+
+    return false;
+  }
+
   bool _isSuccess(Map<String, dynamic> decoded) {
-    return decoded['status']?.toString().toLowerCase() == 'success' ||
-        decoded['success'] == true;
+    return _isSuccessResponse(decoded);
   }
 
   List<Map<String, dynamic>> _readMapList(dynamic rawData, String context) {
@@ -1180,11 +1450,10 @@ class GoogleSheetsService {
       'gre': school.gre,
     };
     try {
-      await http.post(
+      await _postAppsScript(
         Uri.parse(_scriptUrl),
-        headers: _jsonHeaders,
-        body: jsonEncode(data),
-      ).timeout(const Duration(seconds: 30));
+        payload: data,
+      );
     } catch (e) {
       debugPrint('Erro ao sincronizar escola: $e');
     }
@@ -1218,11 +1487,10 @@ class GoogleSheetsService {
       'senha': tech.password,
     };
     try {
-      await http.post(
+      await _postAppsScript(
         Uri.parse(_scriptUrl),
-        headers: _jsonHeaders,
-        body: jsonEncode(data),
-      ).timeout(const Duration(seconds: 30));
+        payload: data,
+      );
     } catch (e) {
       debugPrint('Erro ao sincronizar tecnico: $e');
     }
@@ -1332,8 +1600,7 @@ class GoogleSheetsService {
           throw Exception('Resposta JSON inesperada do Apps Script');
         }
 
-        final ok = decoded['status']?.toString().toLowerCase() == 'success' ||
-                   decoded['success'] == true;
+        final ok = _isSuccessResponse(decoded);
 
         if (!ok) {
           throw Exception(decoded['message'] ?? decoded['error'] ?? 'Erro ao baixar relatórios');
@@ -1640,6 +1907,10 @@ class GoogleSheetsService {
     debugPrint('Apps Script status: ${response.statusCode}');
     final snippet = body.substring(0, body.length > 500 ? 500 : body.length);
     debugPrint('Apps Script response: $snippet');
+    debugPrint('========== RESPOSTA APPS SCRIPT SYNC ==========');
+    debugPrint('URL: $_scriptUrl');
+    debugPrint('STATUS CODE: ${response.statusCode}');
+    debugPrint('BODY RAW: ${body.length > 1000 ? body.substring(0, 1000) : body}');
 
     final trimmedLeft = body.trimLeft();
     final lowerBody = trimmedLeft.toLowerCase();
@@ -1649,12 +1920,34 @@ class GoogleSheetsService {
         lowerBody.startsWith('<body') ||
         lowerBody.startsWith('<')) {
       throw Exception(
-        'Apps Script retornou HTML em vez de JSON. Verifique a URL /exec e a implantacao.'
+        'Apps Script retornou HTML em vez de JSON após redirect.'
       );
     }
 
+    dynamic rawDecoded;
     try {
-      final decoded = fixMojibakeDeep(jsonDecode(body));
+      rawDecoded = jsonDecode(body);
+      debugPrint('DECODED TYPE: ${rawDecoded.runtimeType}');
+      debugPrint('DECODED: $rawDecoded');
+
+      if (rawDecoded is Map) {
+        debugPrint('DECODED status: ${rawDecoded['status']}');
+        debugPrint('DECODED success: ${rawDecoded['success']}');
+        debugPrint('DECODED message: ${rawDecoded['message']}');
+        debugPrint('DECODED id: ${rawDecoded['id']}');
+        debugPrint('DECODED results: ${rawDecoded['results']}');
+      }
+
+      debugPrint('===============================================');
+    } catch (e, stack) {
+      debugPrint('ERRO AO DECODIFICAR RESPOSTA APPS SCRIPT: $e');
+      debugPrint('BODY QUE FALHOU: ${body.length > 1000 ? body.substring(0, 1000) : body}');
+      debugPrintStack(stackTrace: stack);
+      rethrow;
+    }
+
+    try {
+      final decoded = fixMojibakeDeep(rawDecoded);
       if (decoded is Map) {
         return Map<String, dynamic>.from(decoded);
       }

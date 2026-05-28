@@ -38,10 +38,14 @@ class _HomeScreenState extends State<HomeScreen> {
   int _pendingSyncCount = 0;
   final Set<String> _pendingOfflineReportIds = {};
   bool _isSyncing = false;
+  bool _isAutoSyncing = false;
+  bool _hasAutoSyncedOnStart = false;
+  String _syncStatusMessage = '';
+  DateTime? _lastSyncAt;
   
   // Navigation State
   String _searchQuery = '';
-NavigationLevel _currentLevel = NavigationLevel.regional;
+  NavigationLevel _currentLevel = NavigationLevel.regional;
   String? _selectedRegional;
   String? _selectedCity;
   String? _selectedSchool;
@@ -53,6 +57,8 @@ NavigationLevel _currentLevel = NavigationLevel.regional;
     super.initState();
     _loadInitialData();
     _updateSyncCount();
+    // Start automatic synchronization once when HomeScreen is first shown
+    _autoSyncOnStart();
   }
 
     Future<void> _updateSyncCount() async {
@@ -64,6 +70,7 @@ NavigationLevel _currentLevel = NavigationLevel.regional;
       final updateIds = await _sheetsService.getPendingUpdateIds();
       final count = createIds.length + updateIds.length;
       final pendingIds = {...createIds, ...updateIds};
+      var reportsChanged = false;
 
       if (mounted) {
         setState(() {
@@ -71,7 +78,22 @@ NavigationLevel _currentLevel = NavigationLevel.regional;
           _pendingOfflineReportIds
             ..clear()
             ..addAll(pendingIds);
+
+          for (var i = 0; i < _reports.length; i++) {
+            final report = _reports[i];
+            if (!pendingIds.contains(report.id) &&
+                report.syncStatus.toLowerCase().startsWith('pending')) {
+              _reports[i] = report.copyWith(
+                syncStatus: 'synced',
+                lastSyncedAt: DateTime.now(),
+              );
+              reportsChanged = true;
+            }
+          }
         });
+        if (reportsChanged) {
+          await _saveReportsToPrefs();
+        }
         debugPrint('HOME BADGE pendingSyncCount = $_pendingSyncCount');
       }
     } catch (e) {
@@ -85,6 +107,22 @@ NavigationLevel _currentLevel = NavigationLevel.regional;
     }
   }
 
+
+  Future<int> _updateSyncStatusFromCount() async {
+    await _updateSyncCount();
+    final count = await _sheetsService.getPendingSyncCount();
+
+    if (mounted) {
+      setState(() {
+        _pendingSyncCount = count;
+        _lastSyncAt = DateTime.now();
+        _syncStatusMessage =
+            count > 0 ? '$count pendência(s) para enviar' : 'Sincronizado agora';
+      });
+    }
+
+    return count;
+  }
 
 
   ReportModel _hydrateMissingCity(ReportModel report) {
@@ -288,9 +326,13 @@ NavigationLevel _currentLevel = NavigationLevel.regional;
     }
   }
 
+  // ignore: unused_element
   Future<void> _syncAndReconcileReports() async {
     if (_isSyncing) return;
-    setState(() => _isSyncing = true);
+    setState(() {
+      _isSyncing = true;
+      _syncStatusMessage = 'Sincronizando...';
+    });
     
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     
@@ -348,6 +390,7 @@ NavigationLevel _currentLevel = NavigationLevel.regional;
       });
 
       await _saveReportsToPrefs();
+      await _updateSyncStatusFromCount();
       
       if (mounted) {
         scaffoldMessenger.showSnackBar(
@@ -356,7 +399,20 @@ NavigationLevel _currentLevel = NavigationLevel.regional;
       }
     } catch (e) {
       debugPrint('Erro na sincronização: $e');
+      final remainingCount = await _sheetsService.getPendingSyncCount();
+      if (remainingCount == 0) {
+        await _updateSyncStatusFromCount();
+        if (mounted) {
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(content: Text('Sincronizado agora')),
+          );
+        }
+        return;
+      }
       if (mounted) {
+        setState(() {
+          _syncStatusMessage = '';
+        });
         final errText = _formatErrorMessage(e);
         scaffoldMessenger.showSnackBar(
           SnackBar(
@@ -373,8 +429,134 @@ NavigationLevel _currentLevel = NavigationLevel.regional;
     }
   }
 
+  Future<void> _syncAndReconcileCore() async {
+    await _sheetsService.syncOfflineData();
+    await _updateSyncCount();
+
+    final cloudReports = await _sheetsService.fetchReports();
+
+    debugPrint('HomeScreen: cloudReports carregados via sync. Quantidade: ${cloudReports.length}');
+    for (final r in cloudReports) {
+      debugPrint('Report ID: ${r.id}, Numero: ${r.reportNumber}');
+      debugPrint('Subjects: ${r.subjects.runtimeType} -> ${r.subjects}');
+      debugPrint('Technicians: ${r.technicians.runtimeType} -> ${r.technicians}');
+    }
+
+    final pendingCreateIds = await _sheetsService.getPendingCreateIds();
+    final pendingUpdateIds = await _sheetsService.getPendingUpdateIds();
+    final pendingDeleteIds = await _sheetsService.getPendingDeleteIds();
+
+    final List<ReportModel> merged = [];
+    final cloudMap = {for (var r in cloudReports) r.id: r};
+
+    for (var local in _reports) {
+      final id = local.id;
+      if (pendingDeleteIds.contains(id)) continue;
+      if (pendingCreateIds.contains(id) || pendingUpdateIds.contains(id)) {
+        merged.add(local);
+        cloudMap.remove(id);
+      } else {
+        final cloud = cloudMap[id];
+        if (cloud != null) {
+          merged.add(cloud);
+          cloudMap.remove(id);
+        }
+      }
+    }
+    merged.addAll(cloudMap.values);
+
+    final uniqueMerged = _dedupeReportsById(merged);
+
+    if (mounted) {
+      setState(() {
+        _reports.clear();
+        _reports.addAll(uniqueMerged);
+      });
+    }
+
+    await _saveReportsToPrefs();
+  }
+
+  Future<void> _runSync({bool manual = false}) async {
+    if (_isSyncing) return;
+
+    debugPrint('SYNC START manual=$manual');
+    if (mounted) {
+      setState(() {
+        _isSyncing = true;
+        _isAutoSyncing = !manual;
+        _syncStatusMessage = 'Sincronizando...';
+      });
+    }
+
+    try {
+      await _syncAndReconcileCore();
+
+      final count = await _sheetsService.getPendingSyncCount();
+
+      if (!mounted) return;
+
+      setState(() {
+        _pendingSyncCount = count;
+        _lastSyncAt = DateTime.now();
+        _syncStatusMessage =
+            count > 0 ? '$count pendência(s) para enviar' : 'Sincronizado agora';
+      });
+
+      if (manual) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sincronizado agora')),
+        );
+      }
+    } catch (e, stack) {
+      debugPrint('SYNC ERROR manual=$manual: $e');
+      debugPrintStack(stackTrace: stack);
+
+      if (!mounted) return;
+
+      final msg = e.toString().toLowerCase();
+      setState(() {
+        if (msg.contains('socket') ||
+            msg.contains('timeout') ||
+            msg.contains('connection') ||
+            msg.contains('failed host lookup') ||
+            msg.contains('network')) {
+          _syncStatusMessage = 'Sem conexão. Usando dados salvos.';
+        } else {
+          _syncStatusMessage = manual ? 'Não foi possível sincronizar agora.' : '';
+        }
+      });
+
+      if (manual) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_formatErrorMessage(e)),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSyncing = false;
+          _isAutoSyncing = false;
+        });
+      }
+      await _updateSyncCount();
+      debugPrint('SYNC END manual=$manual count=$_pendingSyncCount');
+    }
+  }
+
   Future<void> _syncOffline() async {
-    await _syncAndReconcileReports();
+    await _runSync(manual: true);
+  }
+
+  /// Performs automatic synchronization when HomeScreen is first displayed.
+  /// Ensures it runs only once and updates UI with status messages.
+  Future<void> _autoSyncOnStart() async {
+    if (_hasAutoSyncedOnStart) return;
+    _hasAutoSyncedOnStart = true;
+    await _runSync(manual: false);
   }
 
   String _formatErrorMessage(dynamic error) {
@@ -750,7 +932,7 @@ NavigationLevel _currentLevel = NavigationLevel.regional;
                 child: const Icon(Icons.sync_rounded),
               )
             : const Icon(Icons.sync_rounded),
-        onPressed: _syncOffline,
+        onPressed: _isSyncing ? null : _syncOffline,
         tooltip: 'Sincronizar Offline',
       ),
     ];
@@ -1551,6 +1733,19 @@ NavigationLevel _currentLevel = NavigationLevel.regional;
         body: Column(
           children: [
             _buildProfileHeader(),
+            if (_syncStatusMessage.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(
+                  (!_isAutoSyncing && _lastSyncAt != null)
+                      ? '$_syncStatusMessage · Última sync: ${_lastSyncAt!.hour.toString().padLeft(2, '0')}:${_lastSyncAt!.minute.toString().padLeft(2, '0')}'
+                      : _syncStatusMessage,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             _buildFilters(),
             _buildBreadcrumbs(),
             Expanded(child: bodyContent),
