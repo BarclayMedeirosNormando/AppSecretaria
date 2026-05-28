@@ -92,6 +92,7 @@ class GoogleSheetsService {
   Future<void> sendReport(ReportModel report, String loggedInUser, {bool isEdit = false}) async {
     // Resolve o município mesmo que schoolCity esteja vazio
     final municipio = await _resolveReportMunicipio(report);
+    final materiaisTiJson = jsonEncode(report.tiMaterials.map((item) => item.toJson()).toList());
 
     // Monta o pacote de dados JSON
     final Map<String, dynamic> data = {
@@ -108,6 +109,9 @@ class GoogleSheetsService {
       'tipo_relatorio': report.isTechnicalAnalysis ? 'Técnico' : 'Não-Técnico',
       'motivos': report.subjects.join(', '),
       'observacoes': report.observations ?? '',
+      'materiais_ti_json': materiaisTiJson,
+      'materiaisTiJson': materiaisTiJson,
+      'tiMaterials': report.tiMaterials.map((item) => item.toJson()).toList(),
       'gre': report.gre ?? '',
       'tecnicos': report.technicians.join(', '),
       'responsavel': report.responsiblePerson ?? '',
@@ -267,6 +271,7 @@ class GoogleSheetsService {
                 safeMap['fotosJson'] = JsonUtils.asNullableString(safeMap['fotosJson'] ?? safeMap['fotos_json']);
                 safeMap['urlFotos'] = JsonUtils.asNullableString(safeMap['urlFotos'] ?? safeMap['photos'] ?? safeMap['url_fotos'] ?? safeMap['Link Foto']);
                 safeMap['urlAssinatura'] = JsonUtils.asNullableString(safeMap['urlAssinatura'] ?? safeMap['signatureUrl'] ?? safeMap['Link Assinatura']);
+                safeMap['materiais_ti_json'] = JsonUtils.asNullableString(safeMap['materiais_ti_json'] ?? safeMap['tiMaterials']);
 
                 history.add(safeMap);
               }
@@ -1536,6 +1541,7 @@ class GoogleSheetsService {
       'subjects': normalizedSubjects,
       'motivos': normalizedSubjects,
       'observations': payload['observacoes'],
+      'materiais_ti_json': payload['materiais_ti_json'] ?? payload['materiaisTiJson'] ?? payload['tiMaterials'],
       'gre': payload['gre'],
       'technicians': normalizedTechnicians,
       'tecnicos': normalizedTechnicians,
@@ -1753,6 +1759,7 @@ class GoogleSheetsService {
             // Strings opcionais → garantir String? (nunca List)
             row['fotosJson']    = JsonUtils.asNullableString(row['fotosJson']    ?? row['fotos_json']    ?? row['Fotos JSON']  ?? row['FOTOS_JSON']);
             row['fotos_json']   = row['fotosJson'];
+            row['materiais_ti_json'] = JsonUtils.asNullableString(row['materiais_ti_json'] ?? row['tiMaterials'] ?? row['MATERIAIS_TI_JSON']);
             row['urlFotos']     = JsonUtils.asNullableString(row['urlFotos']     ?? row['Link Foto']     ?? row['Link Fotos'] ?? row['url_fotos']);
             row['signatureUrl'] = JsonUtils.asNullableString(row['signatureUrl'] ?? row['urlAssinatura'] ?? row['Link Assinatura'] ?? row['URL_ASSINATURA']);
             row['urlAssinatura'] = row['signatureUrl'];

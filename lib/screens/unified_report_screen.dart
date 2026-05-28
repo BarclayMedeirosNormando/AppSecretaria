@@ -47,6 +47,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
   final _observationsController = TextEditingController();
 
   final List<PhotoItem> _selectedPhotos = [];
+  final List<TiMaterialItem> _tiMaterials = [];
   final ImagePicker _picker = ImagePicker();
 
   late SignatureController _signatureController;
@@ -67,6 +68,36 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
   ];
 
   bool get _isTechnicalAnalysis => _selectedSubjects.contains('Análise Técnica');
+
+  static const List<String> _tiMaterialAmbientes = [
+    'Secretaria',
+    'Laboratório de Informática',
+    'Sala dos Professores',
+    'Diretoria',
+    'Sala de Aula',
+    'Biblioteca',
+    'Coordenação',
+    'Pátio',
+    'Outro',
+  ];
+
+  static const List<String> _tiMaterialEquipamentos = [
+    'Cabo de rede',
+    'Conector RJ45',
+    'Switch',
+    'Roteador',
+    'Access Point / AP',
+    'Rack',
+    'Patch panel',
+    'Nobreak',
+    'Fonte',
+    'Canaleta',
+    'Tomada de rede',
+    'Ponto lógico',
+    'Repetidor',
+    'Conversor de mídia',
+    'Outro',
+  ];
 
   late final TextEditingController _schoolSearchController;
   late final FocusNode _schoolSearchFocusNode;
@@ -327,6 +358,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
       _selectedSchoolCity = r.schoolCity;
       _selectedSubjects = List.from(r.subjects);
       _observationsController.text = r.observations ?? '';
+      _tiMaterials.addAll(r.tiMaterials);
       _gre = r.gre;
       _selectedPhotos.addAll(r.photos.map((p) => PhotoItem(path: p.path, comment: p.comment)));
       _selectedTechnicians = List.from(r.technicians);
@@ -429,6 +461,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
 
       final report = ReportModel(
         id: widget.existingReport?.id ?? DateTime.now().toString(),
+        reportNumber: widget.existingReport?.reportNumber,
         isTechnicalAnalysis: _isTechnicalAnalysis,
         creator: widget.existingReport?.creator ?? widget.loggedUser,
         schoolName: _selectedSchool!,
@@ -438,6 +471,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
         visitDate: _selectedDate!,
         subjects: _selectedSubjects,
         observations: _observationsController.text,
+        tiMaterials: _isTechnicalAnalysis ? List<TiMaterialItem>.from(_tiMaterials) : const [],
         gre: _gre,
         photos: _selectedPhotos,
         technicians: _selectedTechnicians,
@@ -1084,6 +1118,154 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
     );
   }
 
+  Future<void> _openTiMaterialDialog({TiMaterialItem? item, int? index}) async {
+    final result = await showDialog<TiMaterialItem>(
+      context: context,
+      builder: (dialogContext) => _TiMaterialDialog(
+        item: item,
+        ambientes: _tiMaterialAmbientes,
+        equipamentos: _tiMaterialEquipamentos,
+      ),
+    );
+
+    if (!mounted || result == null) return;
+    setState(() {
+      if (index != null && index >= 0 && index < _tiMaterials.length) {
+        _tiMaterials[index] = result;
+      } else {
+        _tiMaterials.add(result);
+      }
+    });
+  }
+
+  Widget _buildTiMaterialsSection() {
+    if (!_isTechnicalAnalysis) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final grouped = <String, List<MapEntry<int, TiMaterialItem>>>{};
+    for (var i = 0; i < _tiMaterials.length; i++) {
+      final material = _tiMaterials[i];
+      grouped.putIfAbsent(material.ambiente, () => []).add(MapEntry(i, material));
+    }
+
+    return SectionCard(
+      title: 'Materiais de TI necessários',
+      subtitle: 'Informe os materiais por ambiente para execução da análise técnica.',
+      icon: Icons.inventory_2_outlined,
+      actions: [
+        TextButton.icon(
+          onPressed: () => _openTiMaterialDialog(),
+          icon: const Icon(Icons.add_circle_outline, size: 18),
+          label: const Text('Adicionar material de TI'),
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OutlinedButton.icon(
+            onPressed: () => _openTiMaterialDialog(),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Adicionar material de TI'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 48),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          if (_tiMaterials.isEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Nenhum material informado.',
+              style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
+          ] else ...[
+            const SizedBox(height: 16),
+            ...grouped.entries.map((entry) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.key,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...List<MapEntry<int, TiMaterialItem>>.from(entry.value).map((indexedMaterial) {
+                      final index = indexedMaterial.key;
+                      final material = indexedMaterial.value;
+                      final marca = material.marcaModelo.trim();
+                      final observacao = material.observacao.trim();
+                      return Container(
+                        key: ValueKey('${material.ambiente}_${material.equipamento}_${material.quantidade}_$index'),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.55)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.memory_outlined, color: colorScheme.primary, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    marca.isEmpty ? material.equipamento : '${material.equipamento} $marca',
+                                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Quantidade: ${material.quantidade}',
+                                    style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                                  ),
+                                  if (observacao.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      observacao,
+                                      style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Editar',
+                              onPressed: () => _openTiMaterialDialog(item: material, index: index),
+                              icon: const Icon(Icons.edit_outlined),
+                            ),
+                            IconButton(
+                              tooltip: 'Remover',
+                              onPressed: () {
+                                if (index < 0 || index >= _tiMaterials.length) return;
+                                setState(() {
+                                  _tiMaterials.removeAt(index);
+                                });
+                              },
+                              icon: Icon(Icons.delete_outline, color: colorScheme.error),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildResponsibleSection() {
     if (_isTechnicalAnalysis) return const SizedBox.shrink();
 
@@ -1548,6 +1730,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                   _buildSchoolSection(),
                   _buildSubjectsSection(),
                   _buildTechniciansSection(),
+                  _buildTiMaterialsSection(),
                   _buildResponsibleSection(),
                   _buildObservationsSection(),
                   _buildPhotosSection(),
@@ -1569,5 +1752,243 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
     _observationsController.dispose();
     _signatureController.dispose();
     super.dispose();
+  }
+}
+
+class _TiMaterialDialog extends StatefulWidget {
+  final TiMaterialItem? item;
+  final List<String> ambientes;
+  final List<String> equipamentos;
+
+  const _TiMaterialDialog({
+    this.item,
+    required this.ambientes,
+    required this.equipamentos,
+  });
+
+  @override
+  State<_TiMaterialDialog> createState() => _TiMaterialDialogState();
+}
+
+class _TiMaterialDialogState extends State<_TiMaterialDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _ambienteController = TextEditingController();
+  final _equipamentoController = TextEditingController();
+  final _marcaModeloController = TextEditingController();
+  final _quantidadeController = TextEditingController();
+  final _observacaoController = TextEditingController();
+  final _ambienteFocusNode = FocusNode();
+  final _equipamentoFocusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    final item = widget.item;
+    if (item != null) {
+      _ambienteController.text = item.ambiente;
+      _equipamentoController.text = item.equipamento;
+      _marcaModeloController.text = item.marcaModelo;
+      _quantidadeController.text = item.quantidade;
+      _observacaoController.text = item.observacao;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ambienteController.dispose();
+    _equipamentoController.dispose();
+    _marcaModeloController.dispose();
+    _quantidadeController.dispose();
+    _observacaoController.dispose();
+    _ambienteFocusNode.dispose();
+    _equipamentoFocusNode.dispose();
+    super.dispose();
+  }
+
+  String _normalize(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[áàâãäå]'), 'a')
+        .replaceAll(RegExp(r'[éèêë]'), 'e')
+        .replaceAll(RegExp(r'[íìîï]'), 'i')
+        .replaceAll(RegExp(r'[óòôõöø]'), 'o')
+        .replaceAll(RegExp(r'[úùûü]'), 'u')
+        .replaceAll('ç', 'c')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  Iterable<String> _filterOptions(List<String> options, TextEditingValue value) {
+    final query = _normalize(value.text);
+    if (query.isEmpty) return options;
+    return options.where((option) => _normalize(option).contains(query));
+  }
+
+  Widget _buildAutocompleteField({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required List<String> options,
+    required String label,
+    required IconData icon,
+    String? hintText,
+    TextCapitalization textCapitalization = TextCapitalization.sentences,
+    String? Function(String?)? validator,
+  }) {
+    return RawAutocomplete<String>(
+      textEditingController: controller,
+      focusNode: focusNode,
+      optionsBuilder: (value) => _filterOptions(options, value),
+      onSelected: (selection) => controller.text = selection,
+      fieldViewBuilder: (context, fieldController, fieldFocusNode, onFieldSubmitted) {
+        return TextFormField(
+          controller: fieldController,
+          focusNode: fieldFocusNode,
+          textCapitalization: textCapitalization,
+          decoration: InputDecoration(
+            labelText: label,
+            hintText: hintText,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            prefixIcon: Icon(icon),
+          ),
+          validator: validator,
+          onFieldSubmitted: (_) => onFieldSubmitted(),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 220, maxWidth: 520),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  final option = options.elementAt(index);
+                  return ListTile(
+                    dense: true,
+                    title: Text(option),
+                    onTap: () => onSelected(option),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String? _requiredValidator(String? value) {
+    return value == null || value.trim().isEmpty ? 'Campo obrigatório' : null;
+  }
+
+  String? _quantityValidator(String? value) {
+    final text = value?.trim() ?? '';
+    if (text.isEmpty) return 'Campo obrigatório';
+    final number = num.tryParse(text.replaceAll(',', '.'));
+    if (number != null && number < 1) return 'Informe quantidade maior ou igual a 1';
+    return null;
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    final item = TiMaterialItem(
+      ambiente: _ambienteController.text.trim(),
+      equipamento: _equipamentoController.text.trim(),
+      marcaModelo: _marcaModeloController.text.trim(),
+      quantidade: _quantidadeController.text.trim(),
+      observacao: _observacaoController.text.trim(),
+    );
+    Navigator.of(context).pop(item);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEditing = widget.item != null;
+    return AlertDialog(
+      title: Text(isEditing ? 'Editar material de TI' : 'Adicionar material de TI'),
+      content: SizedBox(
+        width: 520,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildAutocompleteField(
+                  controller: _ambienteController,
+                  focusNode: _ambienteFocusNode,
+                  options: widget.ambientes,
+                  label: 'Ambiente',
+                  icon: Icons.meeting_room_outlined,
+                  validator: _requiredValidator,
+                ),
+                const SizedBox(height: 12),
+                _buildAutocompleteField(
+                  controller: _equipamentoController,
+                  focusNode: _equipamentoFocusNode,
+                  options: widget.equipamentos,
+                  label: 'Equipamento / Material',
+                  icon: Icons.router_outlined,
+                  validator: _requiredValidator,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _marcaModeloController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(
+                    labelText: 'Marca / Modelo',
+                    hintText: 'Ex: TP-Link TL-SG108',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.sell_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _quantidadeController,
+                  keyboardType: TextInputType.text,
+                  decoration: InputDecoration(
+                    labelText: 'Quantidade',
+                    hintText: 'Ex: 2, 30m, 2 caixas',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.numbers_outlined),
+                  ),
+                  validator: _quantityValidator,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _observacaoController,
+                  maxLines: 3,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    labelText: 'Observação',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Padding(
+                      padding: EdgeInsets.only(bottom: 42),
+                      child: Icon(Icons.notes_outlined),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: Icon(isEditing ? Icons.check_rounded : Icons.add_rounded, size: 18),
+          label: Text(isEditing ? 'Salvar' : 'Adicionar'),
+        ),
+      ],
+    );
   }
 }

@@ -763,6 +763,7 @@ var HISTORICO_FIELD_ALIASES = {
   gre: ['GRE', 'gre', 'Regional (GRE)'],
   endereco: ['ENDERECO', 'endereco', 'Endereço da Escola', 'Endereco da Escola'],
   fotosJson: ['FOTOS_JSON', 'fotosJson', 'fotos_json'],
+  materiaisTiJson: ['MATERIAIS_TI_JSON', 'materiais_ti_json', 'materiaisTiJson', 'tiMaterials', 'Materiais TI JSON'],
   municipio: ['MUNICIPIO', 'municipio', 'Município', 'Municipio'],
   inep: ['INEP', 'inep', 'schoolInep']
 };
@@ -822,6 +823,9 @@ function fetchHistoryAction(ss, payload) {
       gre: String(getHistoricoValue(row, map, 'gre', '')),
       endereco: String(getHistoricoValue(row, map, 'endereco', '')),
       fotosJson: String(getHistoricoValue(row, map, 'fotosJson', '')),
+      materiais_ti_json: String(getHistoricoValue(row, map, 'materiaisTiJson', '[]') || '[]'),
+      materiaisTiJson: String(getHistoricoValue(row, map, 'materiaisTiJson', '[]') || '[]'),
+      tiMaterials: parseMateriaisTiJson(getHistoricoValue(row, map, 'materiaisTiJson', '[]')),
       municipio: String(municipio),
       schoolCity: String(municipio),
       inep: String(inep),
@@ -1531,7 +1535,8 @@ var RELATORIOS_HEADERS = [
   'municipio',
   'Endere\u00e7o da Escola',
   'inep',
-  'fotos_json'
+  'fotos_json',
+  'materiais_ti_json'
 ];
 var RELATORIO_HEADERS_OFICIAIS = RELATORIOS_HEADERS;
 
@@ -1556,7 +1561,8 @@ var HISTORICO_HEADERS_OFICIAIS = [
   'ENDERECO',
   'FOTOS_JSON',
   'MUNICIPIO',
-  'INEP'
+  'INEP',
+  'MATERIAIS_TI_JSON'
 ];
 
 var AUDITORIA_HEADERS_OFICIAIS = ['DATA/HORA', 'USUARIO', 'ACAO', 'ESCOLA', 'ID_RELATORIO'];
@@ -1575,6 +1581,7 @@ var RELATORIO_FIELD_ALIASES = {
   urlAssinatura: ['Link Assinatura', 'URL_ASSINATURA', 'url_assinatura', 'urlAssinatura', 'signatureUrl'],
   urlFotos: ['Link Foto', 'Link Fotos', 'URL_FOTOS', 'url_fotos', 'urlFotos'],
   fotosJson: ['Fotos JSON', 'FOTOS_JSON', 'fotosJson', 'fotos_json'],
+  materiaisTiJson: ['materiais_ti_json', 'MATERIAIS_TI_JSON', 'materiaisTiJson', 'tiMaterials', 'Materiais TI JSON'],
   numeroRelatorio: ['N\u00famero do Relat\u00f3rio', 'Numero do Relatorio', 'NUMERO_RELATORIO', 'numero_relatorio', 'reportNumber'],
   gre: ['Regional (GRE)', 'GRE', 'gre'],
   municipio: ['municipio', 'Munic\u00edpio', 'Municipio', 'schoolCity', 'cidade', 'city'],
@@ -1979,6 +1986,7 @@ function fetchReportsAction(ss, payload) {
     var urlAssinatura = String(getRelatorioValue(row, map, 'urlAssinatura', '') || '');
     var urlFotos = String(getRelatorioValue(row, map, 'urlFotos', '') || '');
     var fotosJson = String(getRelatorioValue(row, map, 'fotosJson', '') || '');
+    var materiaisTiJson = String(getRelatorioValue(row, map, 'materiaisTiJson', '[]') || '[]');
     var rowObj = {
       id: String(id),
       creator: String(getRelatorioValue(row, map, 'usuario', 'Desconhecido') || 'Desconhecido'),
@@ -2017,6 +2025,9 @@ function fetchReportsAction(ss, payload) {
       urlAssinatura: urlAssinatura,
       urlFotos: urlFotos,
       fotosJson: fotosJson,
+      materiais_ti_json: materiaisTiJson,
+      materiaisTiJson: materiaisTiJson,
+      tiMaterials: parseMateriaisTiJson(materiaisTiJson),
       photos: parseFotosJsonForClient(fotosJson, urlFotos),
       updatedAt: dataEnvio ? toIsoStringOrNow(dataEnvio) : ''
     });
@@ -2230,6 +2241,10 @@ function fillRelatorioRow(row, map, payload, id, municipio, assets) {
   setRelatorioValueInRow(row, map, 'tecnicos', normalizeListField(getValFromObj(payload, ['tecnicos', 'technicians'])));
   setRelatorioValueInRow(row, map, 'responsavel', getValFromObj(payload, ['responsavel', 'responsiblePerson']) || '');
   setRelatorioValueInRow(row, map, 'observacoes', getValFromObj(payload, ['observacoes', 'observations']) || '');
+  var materiaisTiJson = getValFromObj(payload, ['materiais_ti_json', 'materiaisTiJson', 'tiMaterials']);
+  if (materiaisTiJson !== null && materiaisTiJson !== undefined) {
+    setRelatorioValueInRow(row, map, 'materiaisTiJson', normalizeMateriaisTiJson(materiaisTiJson));
+  }
   setRelatorioValueInRow(row, map, 'urlAssinatura', assets.urlAssinatura || '');
   setRelatorioValueInRow(row, map, 'urlFotos', assets.urlFotos || '');
   setRelatorioValueInRow(row, map, 'fotosJson', assets.fotosJson || '[]');
@@ -2633,7 +2648,8 @@ function salvarHistoricoRows(ss, items, editadoPor, motivo) {
         map ? getRelatorioValue(row, map, 'endereco', '') : (row[15] || ''),
         map ? getRelatorioValue(row, map, 'fotosJson', '') : (row[17] || ''),
         map ? getRelatorioValue(row, map, 'municipio', '') : (row[14] || ''),
-        map ? getRelatorioValue(row, map, 'inep', '') : (row[16] || '')
+        map ? getRelatorioValue(row, map, 'inep', '') : (row[16] || ''),
+        map ? getRelatorioValue(row, map, 'materiaisTiJson', '') : (row[18] || '')
       ]);
     }
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, HISTORICO_HEADERS_OFICIAIS.length).setValues(rows);
@@ -2748,6 +2764,23 @@ function parseFotosJsonForClient(fotosJson, urlFotos) {
     for (var p = 0; p < parts.length; p++) addPhoto(parts[p], '');
   }
   return photos;
+}
+
+function parseMateriaisTiJson(value) {
+  if (!value) return [];
+  try {
+    var parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function normalizeMateriaisTiJson(value) {
+  if (value === null || value === undefined || value === '') return '[]';
+  if (Array.isArray(value) || typeof value === 'object') return JSON.stringify(value);
+  var text = String(value).trim();
+  return text ? text : '[]';
 }
 
 function directDriveUrl(fileId) {

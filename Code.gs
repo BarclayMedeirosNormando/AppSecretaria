@@ -65,7 +65,8 @@ const RELATORIOS_HEADERS = [
   'municipio',
   'Endereço da Escola',
   'inep',
-  'fotos_json'
+  'fotos_json',
+  'materiais_ti_json'
 ];
 
 function ensureHeaders(sheet, headers) {
@@ -121,6 +122,23 @@ function parseFotosJsonForClient(fotosJsonStr, linkFotoStr) {
     });
   }
   return photos;
+}
+
+function parseMateriaisTiJson(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function normalizeMateriaisTiJson(value) {
+  if (value === null || value === undefined || value === '') return '[]';
+  if (Array.isArray(value) || typeof value === 'object') return JSON.stringify(value);
+  const text = String(value).trim();
+  return text ? text : '[]';
 }
 
 function resolveMunicipioFromReport(rowMap, escolasSheet) {
@@ -203,7 +221,7 @@ function doPost(e) {
     case 'sendreport':
     case 'savereport':
     case 'savereportaction':
-      return saveReportAction(payload.payload || {});
+      return saveReportAction(payload.payload || payload);
     case 'deletar_relatorio':
     case 'deletereport':
     case 'deletereportaction':
@@ -296,6 +314,7 @@ function fetchReportsAction(p) {
     const subjectsList = splitList(subjectsStr);
     const techniciansList = splitList(techStr);
     const fotosJsonStr = map['fotos_json'] ? String(map['fotos_json']) : '';
+    const materiaisTiJson = map['materiais_ti_json'] ? String(map['materiais_ti_json']) : '[]';
     const linkFotoStr = map['Link Foto'] ? String(map['Link Foto']) : '';
     const photos = parseFotosJsonForClient(fotosJsonStr, linkFotoStr);
     const municipio = resolveMunicipioFromReport(map, escolasSheet);
@@ -325,6 +344,9 @@ function fetchReportsAction(p) {
       urlFotos: linkFotoStr,
       fotosJson: fotosJsonStr,
       fotos_json: fotosJsonStr,
+      materiais_ti_json: materiaisTiJson,
+      materiaisTiJson: materiaisTiJson,
+      tiMaterials: parseMateriaisTiJson(materiaisTiJson),
       photos: photos,
       updatedAt: map['Data do Envio'] || ''
     });
@@ -380,6 +402,20 @@ function saveReportAction(p) {
       const idxFotos = header.indexOf('fotos_json');
       if (idxFotos >= 0) rowVals[idxFotos] = jsonStr;
     }
+    const idxMateriaisTi = header.indexOf('materiais_ti_json');
+    if (idxMateriaisTi >= 0) {
+      if (p.materiais_ti_json !== undefined) {
+        rowVals[idxMateriaisTi] = normalizeMateriaisTiJson(p.materiais_ti_json);
+      } else if (p.materiaisTiJson !== undefined) {
+        rowVals[idxMateriaisTi] = normalizeMateriaisTiJson(p.materiaisTiJson);
+      } else if (p.tiMaterials !== undefined) {
+        rowVals[idxMateriaisTi] = normalizeMateriaisTiJson(p.tiMaterials);
+      } else if (rowIdx > 0) {
+        rowVals[idxMateriaisTi] = data[rowIdx - 1][idxMateriaisTi] || '';
+      } else {
+        rowVals[idxMateriaisTi] = '[]';
+      }
+    }
     // Municipio resolution if missing
     const idxMun = header.indexOf('municipio');
     if (idxMun >= 0 && (!rowVals[idxMun] || rowVals[idxMun].toString().trim() === '')) {
@@ -419,7 +455,7 @@ function deleteReportAction(p) {
   }
   // Archive to history
   const rowValues = relSheet.getRange(rowIdx, 1, 1, relSheet.getLastColumn()).getValues()[0];
-  const histHeaders = ['DATA_SNAPSHOT', 'VERSAO', 'EDITADO_POR', 'DATA_REGISTRO', 'ID', 'USUARIO', 'ESCOLA', 'DATA_VISITA', 'TIPO', 'MOTIVOS', 'TECNICOS', 'RESPONSAVEL', 'OBSERVACOES', 'URL_ASSINATURA', 'URL_FOTOS', 'NUMERO_RELATORIO', 'GRE', 'ENDERECO', 'FOTOS_JSON', 'MUNICIPIO', 'INEP'];
+  const histHeaders = ['DATA_SNAPSHOT', 'VERSAO', 'EDITADO_POR', 'DATA_REGISTRO', 'ID', 'USUARIO', 'ESCOLA', 'DATA_VISITA', 'TIPO', 'MOTIVOS', 'TECNICOS', 'RESPONSAVEL', 'OBSERVACOES', 'URL_ASSINATURA', 'URL_FOTOS', 'NUMERO_RELATORIO', 'GRE', 'ENDERECO', 'FOTOS_JSON', 'MUNICIPIO', 'INEP', 'MATERIAIS_TI_JSON'];
   ensureHeaders(histSheet, histHeaders);
   const snap = new Date();
   const histRow = [];
@@ -446,6 +482,7 @@ function deleteReportAction(p) {
       case 'FOTOS_JSON': histRow.push(rowValues[header.indexOf('fotos_json')] || ''); break;
       case 'MUNICIPIO': histRow.push(rowValues[header.indexOf('municipio')] || ''); break;
       case 'INEP': histRow.push(rowValues[header.indexOf('inep')] || ''); break;
+      case 'MATERIAIS_TI_JSON': histRow.push(rowValues[header.indexOf('materiais_ti_json')] || ''); break;
       default: histRow.push('');
     }
   });

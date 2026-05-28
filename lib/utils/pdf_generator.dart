@@ -84,6 +84,10 @@ class PdfGenerator {
             pw.SizedBox(height: 20),
             ..._buildObservations(report),
           ],
+          if (report.isTechnicalAnalysis && report.tiMaterials.isNotEmpty) ...[
+            pw.SizedBox(height: 20),
+            ..._buildTiMaterials(report),
+          ],
           pw.SizedBox(height: 48),
           _buildSignatureSection(report, signatureBytes),
         ],
@@ -309,6 +313,70 @@ class PdfGenerator {
         textAlign: pw.TextAlign.left,
       ),
     ];
+  }
+
+  static List<pw.Widget> _buildTiMaterials(ReportModel report) {
+    final grouped = <String, List<TiMaterialItem>>{};
+    for (final item in report.tiMaterials) {
+      grouped.putIfAbsent(item.ambiente, () => []).add(item);
+    }
+
+    return [
+      pw.Text(
+        'Materiais de TI necessários',
+        style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+      ),
+      pw.SizedBox(height: 8),
+      ...grouped.entries.expand((entry) => [
+            pw.Text(
+              _s(entry.key),
+              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+              columnWidths: const {
+                0: pw.FlexColumnWidth(2),
+                1: pw.FlexColumnWidth(2),
+                2: pw.FlexColumnWidth(1.2),
+                3: pw.FlexColumnWidth(2.2),
+              },
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  children: [
+                    _tableCell('Equipamento/Material', bold: true),
+                    _tableCell('Marca/Modelo', bold: true),
+                    _tableCell('Quantidade', bold: true),
+                    _tableCell('Observação', bold: true),
+                  ],
+                ),
+                ...entry.value.map((item) => pw.TableRow(
+                      children: [
+                        _tableCell(item.equipamento),
+                        _tableCell(item.marcaModelo),
+                        _tableCell(item.quantidade),
+                        _tableCell(item.observacao),
+                      ],
+                    )),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+          ]),
+    ];
+  }
+
+  static pw.Widget _tableCell(String value, {bool bold = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(5),
+      child: pw.Text(
+        _s(value),
+        style: pw.TextStyle(
+          fontSize: 9,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+      ),
+    );
   }
 
   static pw.Widget _buildSignatureSection(ReportModel report, Uint8List? signatureBytes) {

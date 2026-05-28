@@ -37,6 +37,10 @@ const RELATORIO_FIELD_ALIASES = {
   'fotos_json': 'fotosJson',
   'Link Foto': 'urlFotos',
   'photos_json': 'fotosJson',
+  'materiais_ti_json': 'materiais_ti_json',
+  'materiaisTiJson': 'materiais_ti_json',
+  'tiMaterials': 'materiais_ti_json',
+  'Materiais TI JSON': 'materiais_ti_json',
   // Miscellaneous
   'municipio': 'municipio',
   'inep': 'inep',
@@ -56,6 +60,17 @@ function getOrCreateSheet(name, headers = []) {
     }
   }
   return sheet;
+}
+
+function ensureHeaderColumn(sheet, headerName) {
+  if (sheet.getLastRow() === 0 || sheet.getLastColumn() === 0) {
+    sheet.getRange(1, 1).setValue(headerName);
+    return;
+  }
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (!headers.includes(headerName)) {
+    sheet.getRange(1, sheet.getLastColumn() + 1).setValue(headerName);
+  }
 }
 
 /** Helper: Normalise header row to canonical field names. */
@@ -87,6 +102,16 @@ function asStringList(value) {
 function asMap(value) {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value;
   return {};
+}
+
+function parseMateriaisTiJson(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
 }
 
 /** Respond with JSON and proper CORS headers. */
@@ -188,6 +213,7 @@ function checkVersionAction() {
 /** Fetch reports from RELATORIOS sheet. */
 function fetchReportsAction(payload) {
   const sheet = getOrCreateSheet(SHEET_RELATORIOS);
+  ensureHeaderColumn(sheet, 'materiais_ti_json');
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return jsonResponse({reports: []});
   const headers = normalizeHeaders(data[0]);
@@ -196,7 +222,7 @@ function fetchReportsAction(payload) {
     headers.forEach((h, i) => {
       const raw = row[i];
       // Normalize fields that must be strings for the client
-      if (['subjects', 'technicians', 'motivos', 'tecnicos', 'urlFotos', 'fotosJson', 'fotos_json'].includes(h)) {
+      if (['subjects', 'technicians', 'motivos', 'tecnicos', 'urlFotos', 'fotosJson', 'fotos_json', 'materiais_ti_json'].includes(h)) {
         rec[h] = asString(raw);
       } else if (h === 'photos') {
         // Expect array; if string, try to parse JSON, otherwise empty array
@@ -214,6 +240,9 @@ function fetchReportsAction(payload) {
     // Provide list versions for convenience
     rec.subjectsList = asStringList(rec.subjects);
     rec.techniciansList = asStringList(rec.technicians);
+    rec.materiaisTiJson = asString(rec.materiais_ti_json || '[]');
+    rec.materiais_ti_json = rec.materiaisTiJson;
+    rec.tiMaterials = parseMateriaisTiJson(rec.materiaisTiJson);
     return rec;
   });
   return jsonResponse({reports});
@@ -223,6 +252,7 @@ function fetchReportsAction(payload) {
 function sendReportAction(payload) {
   const report = payload.report || {};
   const sheet = getOrCreateSheet(SHEET_RELATORIOS);
+  ensureHeaderColumn(sheet, 'materiais_ti_json');
   const headers = sheet.getDataRange().offset(0, 0, 1).getValues()[0];
   const normHeaders = normalizeHeaders(headers);
   const row = normHeaders.map(h => report[h] !== undefined ? report[h] : '');
@@ -234,6 +264,7 @@ function sendReportAction(payload) {
 function updateReportAction(payload) {
   const {id, updates} = payload;
   const sheet = getOrCreateSheet(SHEET_RELATORIOS);
+  ensureHeaderColumn(sheet, 'materiais_ti_json');
   const data = sheet.getDataRange().getValues();
   const headers = normalizeHeaders(data[0]);
   for (let r = 1; r < data.length; r++) {
@@ -341,6 +372,7 @@ function deleteTechnicianAction(payload) {
 /** Fetch historical reports from historico_relatorios sheet. */
 function fetchHistoryAction(payload) {
   const sheet = getOrCreateSheet(SHEET_HISTORICO);
+  ensureHeaderColumn(sheet, 'MATERIAIS_TI_JSON');
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return jsonResponse({history: []});
   const headers = normalizeHeaders(data[0]);
@@ -348,7 +380,7 @@ function fetchHistoryAction(payload) {
     const rec = {};
     headers.forEach((h,i)=>{
       const raw = row[i];
-      if (['subjects','technicians','motivos','tecnicos','urlFotos','fotosJson','fotos_json'].includes(h)) {
+      if (['subjects','technicians','motivos','tecnicos','urlFotos','fotosJson','fotos_json','materiais_ti_json'].includes(h)) {
         rec[h] = asString(raw);
       } else if (h==='photos') {
         if (Array.isArray(raw)) rec[h]=raw;

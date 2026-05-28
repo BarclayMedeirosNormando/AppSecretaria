@@ -329,6 +329,7 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
       visitDate: visitDate,
       subjects: motivos,
       observations: ReportModel.asNullableString(h['observacoes'] ?? h['observations'] ?? h['Observações']),
+      tiMaterials: ReportModel.parseTiMaterialsFromJson(h),
       gre: ReportModel.asNullableString(h['gre']),
       technicians: tecnicos,
       responsiblePerson: ReportModel.asNullableString(h['responsavel'] ?? h['responsiblePerson'] ?? h['Responsável da Escola']),

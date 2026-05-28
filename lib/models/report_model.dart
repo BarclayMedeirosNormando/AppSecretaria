@@ -23,6 +23,38 @@ class PhotoItem {
       );
 }
 
+class TiMaterialItem {
+  final String ambiente;
+  final String equipamento;
+  final String marcaModelo;
+  final String quantidade;
+  final String observacao;
+
+  const TiMaterialItem({
+    required this.ambiente,
+    required this.equipamento,
+    required this.marcaModelo,
+    required this.quantidade,
+    this.observacao = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+        'ambiente': ambiente,
+        'equipamento': equipamento,
+        'marcaModelo': marcaModelo,
+        'quantidade': quantidade,
+        'observacao': observacao,
+      };
+
+  factory TiMaterialItem.fromJson(Map<String, dynamic> json) => TiMaterialItem(
+        ambiente: fixMojibake(JsonUtils.asString(json['ambiente']).trim()),
+        equipamento: fixMojibake(JsonUtils.asString(json['equipamento'] ?? json['material']).trim()),
+        marcaModelo: fixMojibake(JsonUtils.asString(json['marcaModelo'] ?? json['marca_modelo'] ?? json['marca']).trim()),
+        quantidade: fixMojibake(JsonUtils.asString(json['quantidade']).trim()),
+        observacao: fixMojibake(JsonUtils.asString(json['observacao'] ?? json['observação'] ?? json['observacoes']).trim()),
+      );
+}
+
 class ReportModel {
     // Compatibility wrappers for legacy calls
   static String asString(dynamic value) => JsonUtils.asString(value);
@@ -41,6 +73,7 @@ class ReportModel {
   final DateTime visitDate;
   final List<String> subjects;
   final String? observations;
+  final List<TiMaterialItem> tiMaterials;
 
   final String? gre;
   final List<PhotoItem> photos;
@@ -70,6 +103,7 @@ class ReportModel {
     required this.visitDate,
     this.subjects = const [],
     this.observations,
+    this.tiMaterials = const [],
     this.gre,
     this.photos = const [],
     this.technicians = const [],
@@ -96,6 +130,7 @@ class ReportModel {
     DateTime? visitDate,
     List<String>? subjects,
     String? observations,
+    List<TiMaterialItem>? tiMaterials,
     String? gre,
     List<PhotoItem>? photos,
     List<String>? technicians,
@@ -121,6 +156,7 @@ class ReportModel {
       visitDate: visitDate ?? this.visitDate,
       subjects: subjects ?? this.subjects,
       observations: observations ?? this.observations,
+      tiMaterials: tiMaterials ?? this.tiMaterials,
       gre: gre ?? this.gre,
       photos: photos ?? this.photos,
       technicians: technicians ?? this.technicians,
@@ -149,6 +185,8 @@ class ReportModel {
         'visitDate': visitDate.toIso8601String(),
         'subjects': subjects,
         'observations': observations,
+        'tiMaterials': tiMaterials.map((item) => item.toJson()).toList(),
+        'materiais_ti_json': jsonEncode(tiMaterials.map((item) => item.toJson()).toList()),
         'gre': gre,
         'photos': photos.map((p) => p.toJson()).toList(),
         'urlFotos': urlFotos ?? photos.map((p) => p.path).where((p) => p.startsWith('http')).join(', '),
@@ -280,6 +318,40 @@ class ReportModel {
     return unique.values.toList();
   }
 
+  static List<TiMaterialItem> parseTiMaterialsFromJson(Map<String, dynamic> json) {
+    final value = json['tiMaterials'] ??
+        json['materiais_ti_json'] ??
+        json['materiaisTiJson'] ??
+        json['materiaisTIJson'] ??
+        json['MATERIAIS_TI_JSON'];
+
+    dynamic decoded = value;
+    if (decoded is String) {
+      final text = decoded.trim();
+      if (text.isEmpty) return const [];
+      try {
+        decoded = jsonDecode(text);
+      } catch (_) {
+        return const [];
+      }
+    }
+
+    if (decoded is! List) return const [];
+
+    final items = <TiMaterialItem>[];
+    for (final item in decoded) {
+      if (item is! Map) continue;
+      final material = TiMaterialItem.fromJson(Map<String, dynamic>.from(item));
+      if (material.ambiente.isEmpty ||
+          material.equipamento.isEmpty ||
+          material.quantidade.isEmpty) {
+        continue;
+      }
+      items.add(material);
+    }
+    return items;
+  }
+
   static DateTime? _tryParseDate(dynamic value) {
     final text = JsonUtils.asString(value).trim();
     if (text.isEmpty) return null;
@@ -317,6 +389,7 @@ class ReportModel {
       visitDate: visitDate,
       subjects: JsonUtils.asStringList(json['subjects'] ?? json['motivos'] ?? json['Motivos / Assuntos']),
       observations: JsonUtils.asNullableString(json['observations'] ?? json['observacoes'] ?? json['Observações'] ?? json['Observacoes']),
+      tiMaterials: parseTiMaterialsFromJson(json),
       gre: JsonUtils.asNullableString(json['gre'] ?? json['GRE'] ?? json['Regional (GRE)']),
       photos: parsePhotosFromJson(json),
       urlFotos: JsonUtils.asNullableString(json['urlFotos'] ?? json['Link Foto'] ?? json['Link Fotos']),
