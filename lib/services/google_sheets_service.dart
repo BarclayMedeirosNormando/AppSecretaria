@@ -224,7 +224,6 @@ class GoogleSheetsService {
 
       if (finalResponse.statusCode == 200) {
         final decoded = _parseAndValidateResponse(finalResponse);
-        debugPrint('Resposta fetchHistory: $decoded');
         if (_isSuccess(decoded)) {
           final rawData = decoded['data'];
           final history = <Map<String, dynamic>>[];
