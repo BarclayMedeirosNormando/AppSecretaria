@@ -18,6 +18,7 @@ class GoogleSheetsService {
   
   // Chave para salvar os dados offline no SharedPreferences
   static const String _offlineQueueKey = 'offline_reports_queue';
+  static const String _localReportsKey = 'local_reports';
   static const List<String> _legacyOfflineQueueKeys = [
     'pending_sync',
     'pending_reports',
@@ -326,6 +327,14 @@ class GoogleSheetsService {
     }
 
     await _saveOfflineQueue(parsedQueue);
+    if (targetAction == 'adicionar') {
+      await _upsertLocalPendingReportFromPayload(
+        data,
+        syncStatus: targetActionType == 'Editar'
+            ? 'pending_update'
+            : 'pending_create',
+      );
+    }
     debugPrint('Relatório salvo na fila offline. Total na fila: ${parsedQueue.length}');
   }
 
@@ -437,6 +446,113 @@ class GoogleSheetsService {
     }
   }
 
+  Future<List<ReportModel>> _loadLocalReports() async {
+    final prefs = await SharedPreferences.getInstance();
+    final reportsJson = prefs.getString(_localReportsKey);
+    if (reportsJson == null || reportsJson.trim().isEmpty) return [];
+
+    try {
+      final decoded = jsonDecode(reportsJson);
+      if (decoded is! List) return [];
+
+      final reports = <ReportModel>[];
+      for (final item in decoded) {
+        if (item is! Map) continue;
+        try {
+          reports.add(ReportModel.fromJson(Map<String, dynamic>.from(item)));
+        } catch (e) {
+          debugPrint('Erro ao parsear relatÃ³rio local: $e');
+        }
+      }
+      return _dedupeReportsById(reports);
+    } catch (e) {
+      debugPrint('Erro ao ler $_localReportsKey: $e');
+      return [];
+    }
+  }
+
+  Future<void> _saveLocalReports(List<ReportModel> reports) async {
+    final prefs = await SharedPreferences.getInstance();
+    final uniqueReports = _dedupeReportsById(reports);
+    await prefs.setString(
+      _localReportsKey,
+      jsonEncode(uniqueReports.map((report) => report.toJson()).toList()),
+    );
+  }
+
+  Future<Set<String>> _ensurePendingReportsInLocalReports(
+    List<Map<String, dynamic>> queue,
+  ) async {
+    final reports = await _loadLocalReports();
+    final reportsById = {
+      for (final report in reports)
+        if (report.id.trim().isNotEmpty) report.id.trim(): report,
+    };
+    var changed = false;
+
+    for (final payload in queue) {
+      final action = (payload['acao'] ?? payload['action'])?.toString() ?? '';
+      final canonicalAction =
+          action == 'sendReport' || action == 'updateReport'
+              ? 'adicionar'
+              : action;
+      if (canonicalAction != 'adicionar') {
+        continue;
+      }
+
+      final id = (payload['id'] ?? payload['reportId'] ?? payload['report_id'])
+              ?.toString()
+              .trim() ??
+          '';
+      if (id.isEmpty) continue;
+
+      final actionType = payload['acao_tipo']?.toString() == 'Editar' ||
+              action == 'updateReport'
+          ? 'Editar'
+          : 'Criar';
+      final syncStatus =
+          actionType == 'Editar' ? 'pending_update' : 'pending_create';
+      final existing = reportsById[id];
+
+      if (existing == null) {
+        final report = _reportFromOfflinePayload(
+          payload,
+          syncStatus: syncStatus,
+        );
+        if (report != null) {
+          reportsById[id] = report;
+          changed = true;
+        }
+        continue;
+      }
+
+      if (existing.syncStatus != syncStatus) {
+        reportsById[id] = existing.copyWith(
+          syncStatus: syncStatus,
+          localUpdatedAt: existing.localUpdatedAt ?? DateTime.now(),
+        );
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await _saveLocalReports(reportsById.values.toList());
+    }
+
+    return reportsById.keys.toSet();
+  }
+
+  Future<void> _upsertLocalPendingReportFromPayload(
+    Map<String, dynamic> payload, {
+    required String syncStatus,
+  }) async {
+    final enrichedPayload = Map<String, dynamic>.from(payload);
+    enrichedPayload['acao'] = 'adicionar';
+    enrichedPayload['acao_tipo'] =
+        syncStatus == 'pending_update' ? 'Editar' : 'Criar';
+    await _ensurePendingReportsInLocalReports([enrichedPayload]);
+  }
+
   /// Remove APENAS a fila offline corrompida/antiga, sem tocar em local_reports
   /// ou qualquer outro dado do app. Útil para recuperação manual.
   Future<void> clearOfflineQueueOnly() async {
@@ -467,18 +583,6 @@ class GoogleSheetsService {
     final prefs = await SharedPreferences.getInstance();
     
     // Obter IDs dos relatórios locais para verificação
-    final String? reportsJson = prefs.getString('local_reports');
-    final Set<String> localReportIds = {};
-    if (reportsJson != null) {
-      try {
-        final List<dynamic> decodedList = jsonDecode(reportsJson);
-        for (final item in decodedList) {
-          if (item is Map && item['id'] != null) {
-            localReportIds.add(item['id'].toString().trim());
-          }
-        }
-      } catch (_) {}
-    }
     
     final List<Map<String, dynamic>> consolidatedQueue = [];
     
@@ -525,18 +629,6 @@ class GoogleSheetsService {
             continue;
           }
           
-          final action = (mapItem['acao'] ?? mapItem['action'] ?? '').toString().trim();
-          final canonicalAction = action == 'sendReport' || action == 'updateReport'
-              ? 'adicionar'
-              : action == 'deleteReport' || action == 'deletar_relatorio'
-                  ? 'deletar_relatorio'
-                  : action;
-                  
-          final id = (mapItem['id'] ?? mapItem['reportId'] ?? mapItem['report_id'] ?? '').toString().trim();
-          if (canonicalAction != 'deletar_relatorio' && !localReportIds.contains(id)) {
-            continue;
-          }
-          
           validItems.add(mapItem);
         }
         
@@ -558,13 +650,14 @@ class GoogleSheetsService {
       }
     }
     
-    final List<Map<String, dynamic>> normalizedQueue = _normalizeConsolidatedQueue(consolidatedQueue, localReportIds);
+    await _ensurePendingReportsInLocalReports(consolidatedQueue);
+    final List<Map<String, dynamic>> normalizedQueue = _normalizeConsolidatedQueue(consolidatedQueue);
     await _saveOfflineQueue(normalizedQueue);
     
     return normalizedQueue.length;
   }
 
-  List<Map<String, dynamic>> _normalizeConsolidatedQueue(List<Map<String, dynamic>> queue, Set<String> localReportIds) {
+  List<Map<String, dynamic>> _normalizeConsolidatedQueue(List<Map<String, dynamic>> queue) {
     List<Map<String, dynamic>> parsedQueue = [];
     for (var item in queue) {
       final action = (item['acao'] ?? item['action'] ?? '').toString().trim();
@@ -658,19 +751,7 @@ class GoogleSheetsService {
     final List<Map<String, dynamic>> rawQueue = await _getOfflineQueue();
     
     // Obter IDs dos relatórios locais para verificação
-    final prefs = await SharedPreferences.getInstance();
-    final String? reportsJson = prefs.getString('local_reports');
-    final Set<String> localReportIds = {};
-    if (reportsJson != null) {
-      try {
-        final List<dynamic> decodedList = jsonDecode(reportsJson);
-        for (final item in decodedList) {
-          if (item is Map && item['id'] != null) {
-            localReportIds.add(item['id'].toString().trim());
-          }
-        }
-      } catch (_) {}
-    }
+    final localReportIds = await _ensurePendingReportsInLocalReports(rawQueue);
 
     List<Map<String, dynamic>> parsedQueue = [];
     for (final mapItem in rawQueue) {

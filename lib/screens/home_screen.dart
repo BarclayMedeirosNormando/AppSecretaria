@@ -110,6 +110,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<int> _updateSyncStatusFromCount() async {
     await _updateSyncCount();
+    final pendingReports = await _sheetsService.getPendingCreateOrUpdateReports();
+    if (pendingReports.isNotEmpty && mounted) {
+      setState(() {
+        _reports
+          ..clear()
+          ..addAll(_dedupeReportsById([..._reports, ...pendingReports]));
+      });
+      await _saveReportsToPrefs();
+    }
     final count = await _sheetsService.getPendingSyncCount();
 
     if (mounted) {
@@ -223,6 +232,17 @@ class _HomeScreenState extends State<HomeScreen> {
     await _updateSyncCount();
 
     // Sincroniza e reconcilia os relatórios em segundo plano silenciosamente
+    final initialPendingReports =
+        await _sheetsService.getPendingCreateOrUpdateReports();
+    if (initialPendingReports.isNotEmpty && mounted) {
+      setState(() {
+        _reports
+          ..clear()
+          ..addAll(_dedupeReportsById([..._reports, ...initialPendingReports]));
+      });
+      await _saveReportsToPrefs();
+    }
+
     try {
       await _sheetsService.syncOfflineData();
       await _updateSyncCount();
@@ -251,6 +271,11 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
     return map.values.toList();
+  }
+
+  Future<List<ReportModel>> _localReportsWithPendingQueue() async {
+    final pendingReports = await _sheetsService.getPendingCreateOrUpdateReports();
+    return _dedupeReportsById([..._reports, ...pendingReports]);
   }
 
   Future<void> _saveReportsToPrefs() async {
@@ -358,7 +383,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final List<ReportModel> merged = [];
       final cloudMap = {for (var r in cloudReports) r.id: r};
 
-      for (var local in _reports) {
+      final localReports = await _localReportsWithPendingQueue();
+      for (var local in localReports) {
         final id = local.id;
         if (pendingDeleteIds.contains(id)) continue;
         if (pendingCreateIds.contains(id) || pendingUpdateIds.contains(id)) {
@@ -434,7 +460,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final List<ReportModel> merged = [];
     final cloudMap = {for (var r in cloudReports) r.id: r};
 
-    for (var local in _reports) {
+    final localReports = await _localReportsWithPendingQueue();
+    for (var local in localReports) {
       final id = local.id;
       if (pendingDeleteIds.contains(id)) continue;
       if (pendingCreateIds.contains(id) || pendingUpdateIds.contains(id)) {
@@ -590,7 +617,8 @@ class _HomeScreenState extends State<HomeScreen> {
         final List<ReportModel> merged = [];
         final cloudMap = {for (var r in uniqueCloud) r.id: r};
 
-        for (var local in _reports) {
+        final localReports = await _localReportsWithPendingQueue();
+        for (var local in localReports) {
           final id = local.id;
           if (pendingDeleteIds.contains(id)) continue;
           if (pendingCreateIds.contains(id) || pendingUpdateIds.contains(id)) {
@@ -644,7 +672,6 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.remove('logged_user');
     await prefs.remove('logged_user_permission');
     await prefs.remove('logged_user_id');
-    await prefs.remove('local_reports');
     
     if (mounted) {
       Navigator.of(context).pushReplacement(
