@@ -19,6 +19,20 @@ class _TechnicianListScreenState extends State<TechnicianListScreen> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
+  String _normalize(String? value) {
+    if (value == null) return '';
+    return value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[áàâãä]'), 'a')
+        .replaceAll(RegExp(r'[éèêë]'), 'e')
+        .replaceAll(RegExp(r'[íìîï]'), 'i')
+        .replaceAll(RegExp(r'[óòôõö]'), 'o')
+        .replaceAll(RegExp(r'[úùûü]'), 'u')
+        .replaceAll('ç', 'c')
+        .replaceAll(RegExp(r'\s+'), ' ');
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -52,6 +66,8 @@ class _TechnicianListScreenState extends State<TechnicianListScreen> {
   }
 
   Widget _buildFilterCard(ColorScheme colorScheme, int totalCount) {
+    final showHeaderButton = MediaQuery.of(context).size.width > 700;
+
     return Card(
       elevation: 0,
       color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
@@ -93,13 +109,21 @@ class _TechnicianListScreenState extends State<TechnicianListScreen> {
                     ),
                   ),
                 ),
+                if (showHeaderButton) ...[
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () => _openForm(),
+                    icon: const Icon(Icons.person_add_rounded, size: 18),
+                    label: const Text('Adicionar'),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 16),
             AppSearchField(
               controller: _searchController,
               label: 'Buscar técnico',
-              hint: 'Nome ou matrícula',
+              hint: 'Nome, matrícula, e-mail ou permissão',
               onChanged: (v) => setState(() => _searchQuery = v),
               onClear: () {
                 setState(() {
@@ -164,6 +188,46 @@ class _TechnicianListScreenState extends State<TechnicianListScreen> {
     );
   }
 
+  Widget _buildTechInfoChip({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required Color backgroundColor,
+    double maxWidth = 220,
+  }) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.labelSmall?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTechCard(TechnicianModel tech, bool isLargeScreen, ColorScheme colorScheme, TextTheme textTheme) {
     return Card(
       elevation: 1,
@@ -201,38 +265,31 @@ class _TechnicianListScreenState extends State<TechnicianListScreen> {
                       color: colorScheme.onSurface,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Row(
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
                     children: [
-                      Icon(Icons.badge_outlined, size: 14, color: colorScheme.primary),
-                      const SizedBox(width: 4),
-                      Text(
-                        tech.registration,
-                        style: textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: colorScheme.primary,
-                        ),
+                      _buildPermissionChip(tech.permissions, colorScheme, textTheme),
+                      _buildTechInfoChip(
+                        icon: Icons.badge_outlined,
+                        label: tech.registration.isNotEmpty
+                            ? 'Matrícula ${tech.registration}'
+                            : 'Sem matrícula',
+                        color: colorScheme.primary,
+                        backgroundColor:
+                            colorScheme.primaryContainer.withValues(alpha: 0.45),
+                      ),
+                      _buildTechInfoChip(
+                        icon: Icons.email_outlined,
+                        label: tech.email.isNotEmpty ? tech.email : 'Sem e-mail',
+                        color: colorScheme.onSurfaceVariant,
+                        backgroundColor: colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.55),
+                        maxWidth: isLargeScreen ? 260 : 210,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.email_outlined, size: 14, color: colorScheme.onSurfaceVariant),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          tech.email.isNotEmpty ? tech.email : 'Sem email',
-                          style: textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _buildPermissionChip(tech.permissions, colorScheme, textTheme),
                 ],
               ),
             ),
@@ -294,12 +351,18 @@ class _TechnicianListScreenState extends State<TechnicianListScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final isLargeScreen = MediaQuery.of(context).size.width > 600;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isLargeScreen = screenWidth > 700;
+    final useGrid = screenWidth >= 1040;
 
     final allTechs = _technicianService.technicians;
+    final query = _normalize(_searchQuery);
     final techs = allTechs.where((t) {
-      return t.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          t.registration.contains(_searchQuery);
+      if (query.isEmpty) return true;
+      return _normalize(t.name).contains(query) ||
+          _normalize(t.registration).contains(query) ||
+          _normalize(t.email).contains(query) ||
+          _normalize(t.permissions).contains(query);
     }).toList();
 
     return Scaffold(
@@ -315,7 +378,7 @@ class _TechnicianListScreenState extends State<TechnicianListScreen> {
       ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
+          constraints: const BoxConstraints(maxWidth: 1120),
           child: Column(
             children: [
               _buildFilterCard(colorScheme, allTechs.length),
@@ -331,13 +394,30 @@ class _TechnicianListScreenState extends State<TechnicianListScreen> {
                         actionIcon: Icons.person_add_rounded,
                         onAction: _searchQuery.isEmpty ? () => _openForm() : null,
                       )
-                    : ListView.builder(
-                        padding: const EdgeInsets.only(bottom: 96, top: 4),
-                        itemCount: techs.length,
-                        itemBuilder: (ctx, index) {
-                          return _buildTechCard(techs[index], isLargeScreen, colorScheme, textTheme);
-                        },
-                      ),
+                    : useGrid
+                        ? GridView.builder(
+                            padding: const EdgeInsets.fromLTRB(8, 4, 8, 96),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              mainAxisExtent: 176,
+                              crossAxisSpacing: 4,
+                              mainAxisSpacing: 4,
+                            ),
+                            itemCount: techs.length,
+                            itemBuilder: (ctx, index) {
+                              return _buildTechCard(techs[index], isLargeScreen,
+                                  colorScheme, textTheme);
+                            },
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.only(bottom: 96, top: 4),
+                            itemCount: techs.length,
+                            itemBuilder: (ctx, index) {
+                              return _buildTechCard(techs[index], isLargeScreen,
+                                  colorScheme, textTheme);
+                            },
+                          ),
               ),
             ],
           ),

@@ -29,7 +29,16 @@ class _SchoolListScreenState extends State<SchoolListScreen> {
 
   String _normalize(String? value) {
     if (value == null) return '';
-    return value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    return value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[áàâãä]'), 'a')
+        .replaceAll(RegExp(r'[éèêë]'), 'e')
+        .replaceAll(RegExp(r'[íìîï]'), 'i')
+        .replaceAll(RegExp(r'[óòôõö]'), 'o')
+        .replaceAll(RegExp(r'[úùûü]'), 'u')
+        .replaceAll('ç', 'c')
+        .replaceAll(RegExp(r'\s+'), ' ');
   }
 
   @override
@@ -240,6 +249,14 @@ class _SchoolListScreenState extends State<SchoolListScreen> {
                       visualDensity: VisualDensity.compact,
                     ),
                   ),
+                if (isLargeScreen) ...[
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () => _openForm(),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('Adicionar'),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 4),
@@ -253,8 +270,8 @@ class _SchoolListScreenState extends State<SchoolListScreen> {
             // Search bar
             AppSearchField(
               controller: _searchController,
-              label: 'Buscar por Nome ou INEP',
-              hint: 'Digite para buscar...',
+              label: 'Buscar escola',
+              hint: 'Nome, INEP, município ou GRE',
               onChanged: (v) => setState(() => _searchQuery = v),
               onClear: () {
                 setState(() {
@@ -563,7 +580,8 @@ class _SchoolListScreenState extends State<SchoolListScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
-    final isLargeScreen = screenWidth > 600;
+    final isLargeScreen = screenWidth > 700;
+    final useGrid = screenWidth >= 1024;
     final schools = _filteredSchools;
 
     return Scaffold(
@@ -588,8 +606,11 @@ class _SchoolListScreenState extends State<SchoolListScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1120),
+          child: Column(
+            children: [
           _buildFilterCard(isLargeScreen, colorScheme),
           // Results count
           if (!_isLoading && _loadError == null)
@@ -621,16 +642,34 @@ class _SchoolListScreenState extends State<SchoolListScreen> {
           Expanded(
             child: _isLoading || (_loadError != null && _schools.isEmpty) || schools.isEmpty
                 ? _buildEmptyState(colorScheme)
-                : ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 96, top: 4),
-                    itemCount: schools.length,
-                    itemBuilder: (ctx, index) {
-                      return _buildSchoolCard(
-                          schools[index], isLargeScreen, colorScheme);
-                    },
-                  ),
+                : useGrid
+                    ? GridView.builder(
+                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 96),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisExtent: 178,
+                          crossAxisSpacing: 4,
+                          mainAxisSpacing: 4,
+                        ),
+                        itemCount: schools.length,
+                        itemBuilder: (ctx, index) {
+                          return _buildSchoolCard(
+                              schools[index], isLargeScreen, colorScheme);
+                        },
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 96, top: 4),
+                        itemCount: schools.length,
+                        itemBuilder: (ctx, index) {
+                          return _buildSchoolCard(
+                              schools[index], isLargeScreen, colorScheme);
+                        },
+                      ),
           ),
-        ],
+            ],
+          ),
+        ),
       ),
       floatingActionButton: isLargeScreen
           ? FloatingActionButton.extended(
