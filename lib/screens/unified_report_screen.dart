@@ -527,12 +527,100 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
     );
   }
 
+  Widget _buildRegionalFilterField() {
+    return DropdownButtonFormField<String>(
+      key: ValueKey('regional_$_filterRegional'),
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Filtrar por Regional',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        prefixIcon: const Icon(Icons.map_outlined),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      ),
+      initialValue: _containsFilterText(_availableRegionals, _filterRegional)
+          ? _filterRegional
+          : null,
+      items: [
+        const DropdownMenuItem(
+          value: null,
+          child: Text('Todas as Regionais'),
+        ),
+        ..._availableRegionals.map(
+          (regional) => DropdownMenuItem(
+            value: regional,
+            child: Text(regional, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ],
+      onChanged: _handleRegionalChanged,
+    );
+  }
+
+  Widget _buildCityFilterField() {
+    return DropdownButtonFormField<String>(
+      key: ValueKey('city_$_filterCity'),
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Filtrar por Município',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        prefixIcon: const Icon(Icons.location_city_outlined),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      ),
+      initialValue:
+          _containsFilterText(_availableCities, _filterCity) ? _filterCity : null,
+      items: [
+        const DropdownMenuItem(
+          value: null,
+          child: Text('Todos os Municípios'),
+        ),
+        ..._availableCities.map(
+          (city) => DropdownMenuItem(
+            value: city,
+            child: Text(city, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ],
+      onChanged: _handleCityChanged,
+    );
+  }
+
+  Widget _buildSchoolCounterChip(IconData icon, String label) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: colorScheme.primary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSchoolSection() {
     final theme = Theme.of(context);
     final isLargeScreen = MediaQuery.of(context).size.width > 600;
+    final filteredSchoolCount =
+        _getFilteredSchools(_schoolSearchController.text).length;
 
     return SectionCard(
       title: 'Escola',
+      icon: Icons.school_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -569,123 +657,68 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
               ),
             ),
           ] else ...[
-            if (isLargeScreen)
-              Row(
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.28),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.45),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      key: ValueKey('regional_$_filterRegional'),
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        labelText: 'Filtrar por Regional',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        prefixIcon: const Icon(Icons.map_outlined),
-                      ),
-                      initialValue: _containsFilterText(_availableRegionals, _filterRegional)
-                          ? _filterRegional
-                          : null,
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('Todas as Regionais')),
-                        ..._availableRegionals.map((r) => DropdownMenuItem(value: r, child: Text(r, overflow: TextOverflow.ellipsis)))
+                  if (isLargeScreen)
+                    Row(
+                      children: [
+                        Expanded(child: _buildRegionalFilterField()),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildCityFilterField()),
                       ],
-                      onChanged: _handleRegionalChanged,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      key: ValueKey('city_$_filterCity'),
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        labelText: 'Filtrar por Município',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        prefixIcon: const Icon(Icons.location_city_outlined),
+                    )
+                  else ...[
+                    _buildRegionalFilterField(),
+                    const SizedBox(height: 12),
+                    _buildCityFilterField(),
+                  ],
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _buildSchoolCounterChip(
+                        Icons.location_city_outlined,
+                        '${_availableCities.length} município(s)',
                       ),
-                      initialValue: _containsFilterText(_availableCities, _filterCity)
-                          ? _filterCity
-                          : null,
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('Todos os Municípios')),
-                        ..._availableCities.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis)))
-                      ],
-                      onChanged: _handleCityChanged,
-                    ),
+                      _buildSchoolCounterChip(
+                        Icons.school_outlined,
+                        '$filteredSchoolCount escola(s)',
+                      ),
+                      if (_filterRegional != null || _filterCity != null)
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _filterRegional = null;
+                              _filterCity = null;
+                              _clearSelectedSchool();
+                            });
+                          },
+                          icon: const Icon(Icons.clear_all_rounded, size: 16),
+                          label: const Text('Limpar Filtros'),
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                    ],
                   ),
                 ],
-              )
-            else ...[
-              DropdownButtonFormField<String>(
-                key: ValueKey('regional_$_filterRegional'),
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'Filtrar por Regional',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  prefixIcon: const Icon(Icons.map_outlined),
-                ),
-                initialValue: _containsFilterText(_availableRegionals, _filterRegional)
-                    ? _filterRegional
-                    : null,
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('Todas as Regionais')),
-                  ..._availableRegionals.map((r) => DropdownMenuItem(value: r, child: Text(r, overflow: TextOverflow.ellipsis)))
-                ],
-                onChanged: _handleRegionalChanged,
               ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                key: ValueKey('city_$_filterCity'),
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'Filtrar por Município',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  prefixIcon: const Icon(Icons.location_city_outlined),
-                ),
-                initialValue: _containsFilterText(_availableCities, _filterCity)
-                    ? _filterCity
-                    : null,
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('Todos os Municípios')),
-                  ..._availableCities.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis)))
-                ],
-                onChanged: _handleCityChanged,
-              ),
-            ],
-
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '${_availableCities.length} município(s) disponível(is)',
-                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500),
-                ),
-                Text(
-                  '${_getFilteredSchools(_schoolSearchController.text).length} escola(s) encontrada(s)',
-                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500),
-                ),
-              ],
             ),
-
-            if (_filterRegional != null || _filterCity != null)
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _filterRegional = null;
-                      _filterCity = null;
-                      _clearSelectedSchool();
-                    });
-                  },
-                  icon: const Icon(Icons.clear_all_rounded, size: 16),
-                  label: const Text('Limpar Filtros', style: TextStyle(fontSize: 12)),
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ),
 
             if (_filterRegional != null && _schoolsBySelectedRegional.isEmpty)
               Padding(
@@ -745,8 +778,14 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                       decoration: InputDecoration(
                         labelText: 'Buscar Escola (Nome ou INEP)',
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: theme.colorScheme.surface,
                         prefixIcon: const Icon(Icons.school_outlined),
                         suffixIcon: const Icon(Icons.search_rounded),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                       ),
                       onEditingComplete: onEditingComplete,
                       validator: (value) => _selectedSchool == null ? 'Selecione uma escola da lista' : null,

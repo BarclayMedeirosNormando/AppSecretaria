@@ -1388,31 +1388,39 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildReportCard(ReportModel report, int originalIndex) {
     final colorScheme = Theme.of(context).colorScheme;
     final isLargeScreen = MediaQuery.of(context).size.width > 600;
+    final isPending = _pendingOfflineReportIds.contains(report.id);
+    final schoolCity = _safeCity(report);
+    final hasCity = schoolCity.trim().isNotEmpty &&
+        schoolCity != 'Município não informado' &&
+        schoolCity != 'MunicÃ­pio nÃ£o informado';
 
     return Card(
-      elevation: 1,
+      elevation: 0,
       margin: const EdgeInsets.only(bottom: 12, top: 4, left: 16, right: 16),
+      color: colorScheme.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         onTap: () => _openUnifiedScreen(existingReport: report, index: originalIndex),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                width: 42,
+                height: 42,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer.withValues(alpha: 0.5),
-                  shape: BoxShape.circle,
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(Icons.assignment_outlined, color: colorScheme.primary),
+                child: Icon(Icons.assignment_outlined, color: colorScheme.primary, size: 22),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1420,59 +1428,53 @@ class _HomeScreenState extends State<HomeScreen> {
                     Wrap(
                       crossAxisAlignment: WrapCrossAlignment.center,
                       spacing: 8,
-                      runSpacing: 4,
+                      runSpacing: 6,
                       children: [
-                        Text(
-                          report.reportNumber,
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.primary),
-                        ),
-                        if (_pendingOfflineReportIds.contains(report.id))
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.orange.withValues(alpha: 0.5), width: 0.5),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.cloud_off_rounded, size: 12, color: Colors.orange),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Pendente',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.orange,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                        _buildReportNumberChip(report.reportNumber),
+                        if (isPending) _buildPendingChip(),
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     Text(
                       report.schoolName,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: colorScheme.onSurface,
+                            height: 1.2,
+                          ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
-                        _buildInfoChip(Icons.calendar_today_rounded, DateFormat('dd/MM/yyyy').format(report.visitDate)),
+                        _buildInfoChip(
+                          Icons.calendar_today_rounded,
+                          DateFormat('dd/MM/yyyy').format(report.visitDate),
+                        ),
                         if (report.gre != null && report.gre!.isNotEmpty)
                           _buildInfoChip(Icons.map_rounded, report.gre!),
+                        if (hasCity)
+                          _buildInfoChip(Icons.location_city_rounded, schoolCity),
                         if (report.photos.isNotEmpty)
-                          _buildInfoChip(Icons.photo_library_rounded, '${report.photos.length} fotos'),
+                          _buildInfoChip(
+                            Icons.photo_library_rounded,
+                            '${report.photos.length} fotos',
+                          ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Text(
                       report.subjects.isEmpty ? 'Sem motivo registrado' : report.subjects.join(', '),
-                      style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
+                      style: TextStyle(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 13,
+                        height: 1.25,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -1527,6 +1529,109 @@ class _HomeScreenState extends State<HomeScreen> {
       icon: icon,
       color: Theme.of(context).colorScheme.onSurfaceVariant,
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+    );
+  }
+
+  Widget _buildReportNumberChip(String reportNumber) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.18)),
+      ),
+      child: Text(
+        reportNumber,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: colorScheme.onPrimaryContainer,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0,
+            ),
+      ),
+    );
+  }
+
+  Widget _buildPendingChip() {
+    final color = Colors.amber.shade800;
+    return InfoChip(
+      label: 'Pendente',
+      icon: Icons.cloud_off_rounded,
+      color: color,
+      backgroundColor: Colors.amber.withValues(alpha: 0.14),
+    );
+  }
+
+  Widget _buildSyncStatusChip() {
+    if (_syncStatusMessage.isEmpty) return const SizedBox.shrink();
+
+    final colorScheme = Theme.of(context).colorScheme;
+    final message = _syncStatusMessage.toLowerCase();
+    final hasError = message.contains('erro') || message.contains('não foi');
+    final isOffline = message.contains('sem conexão') ||
+        message.contains('offline') ||
+        message.contains('dados salvos');
+    final hasPending = message.contains('pendência');
+    final isSynced = message.contains('sincronizado');
+
+    late final IconData icon;
+    late final Color color;
+
+    if (_isSyncing) {
+      icon = Icons.sync_rounded;
+      color = colorScheme.primary;
+    } else if (hasError) {
+      icon = Icons.error_outline_rounded;
+      color = colorScheme.error;
+    } else if (isOffline) {
+      icon = Icons.wifi_off_rounded;
+      color = colorScheme.tertiary;
+    } else if (hasPending) {
+      icon = Icons.pending_actions_rounded;
+      color = Colors.amber.shade800;
+    } else if (isSynced) {
+      icon = Icons.check_circle_outline_rounded;
+      color = Colors.green.shade700;
+    } else {
+      icon = Icons.sync_rounded;
+      color = colorScheme.primary;
+    }
+
+    final label = (!_isAutoSyncing && _lastSyncAt != null)
+        ? '$_syncStatusMessage · ${_lastSyncAt!.hour.toString().padLeft(2, '0')}:${_lastSyncAt!.minute.toString().padLeft(2, '0')}'
+        : _syncStatusMessage;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: color.withValues(alpha: 0.22)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: color),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                      ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1733,19 +1838,7 @@ class _HomeScreenState extends State<HomeScreen> {
         body: Column(
           children: [
             _buildProfileHeader(),
-            if (_syncStatusMessage.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Text(
-                  (!_isAutoSyncing && _lastSyncAt != null)
-                      ? '$_syncStatusMessage · Última sync: ${_lastSyncAt!.hour.toString().padLeft(2, '0')}:${_lastSyncAt!.minute.toString().padLeft(2, '0')}'
-                      : _syncStatusMessage,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+            _buildSyncStatusChip(),
             _buildFilters(),
             _buildBreadcrumbs(),
             Expanded(child: bodyContent),
