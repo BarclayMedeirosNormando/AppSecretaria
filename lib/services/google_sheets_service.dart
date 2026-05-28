@@ -139,14 +139,6 @@ class GoogleSheetsService {
       data['urlAssinaturaExistente'] = report.signatureUrl!.trim();
     }
 
-    // Diagnóstico obrigatório (Parte 2)
-    debugPrint('Sincronizando relatório ID: ${report.id}');
-    debugPrint('Número relatório: ${report.reportNumber}');
-    debugPrint('Escola: ${report.schoolName}');
-    debugPrint('Payload action: adicionar');
-    debugPrint('Payload municipio: $municipio');
-    debugPrint('Payload inep: ${report.schoolInep}');
-
     try {
       // Tenta enviar para a internet seguindo redirects do Apps Script.
       final response = await _postAppsScript(
@@ -156,11 +148,7 @@ class GoogleSheetsService {
 
       if (response.statusCode == 200 || response.statusCode == 302) {
         final decoded = _parseAndValidateResponse(response);
-        if (_isSuccess(decoded)) {
-
-
-          debugPrint('Relatório ${report.id} enviado com sucesso para a nuvem!');
-        } else {
+        if (!_isSuccess(decoded)) {
           final errMsg = decoded['message'] ?? 'Erro desconhecido no Apps Script';
           throw Exception(errMsg);
         }
@@ -351,7 +339,6 @@ class GoogleSheetsService {
     try {
       // Primeiro tenta ler como String JSON (formato atual correto)
       final rawString = prefs.getString(_offlineQueueKey);
-      debugPrint('Offline queue raw length: ${rawString?.length}');
 
       if (rawString == null || rawString.trim().isEmpty) {
         // Sem dado na chave principal — verifica chaves legadas
@@ -444,11 +431,9 @@ class GoogleSheetsService {
     final prefs = await SharedPreferences.getInstance();
     if (queue.isEmpty) {
       await prefs.remove(_offlineQueueKey);
-      debugPrint('Fila offline limpa e chave removida.');
     } else {
       // setString garante que getString nunca lançará TypeError
       await prefs.setString(_offlineQueueKey, jsonEncode(queue));
-      debugPrint('Fila offline salva. Total de itens: ${queue.length}');
     }
   }
 
@@ -459,21 +444,6 @@ class GoogleSheetsService {
     try { await prefs.remove(_offlineQueueKey); } catch (_) {}
     await _cleanupLegacyKeys(prefs);
     debugPrint('Fila offline limpa manualmente via clearOfflineQueueOnly.');
-  }
-
-  int _getKeyCount(SharedPreferences prefs, String key) {
-    if (!prefs.containsKey(key)) return 0;
-    try {
-      final val = prefs.get(key);
-      if (val is List) return val.length;
-      if (val is String) {
-        if (val.trim().isEmpty) return 0;
-        final decoded = jsonDecode(val);
-        if (decoded is List) return decoded.length;
-        if (decoded is Map) return 1;
-      }
-    } catch (_) {}
-    return 0;
   }
 
   bool _isValidPendingItem(Map<String, dynamic>? item) {
@@ -552,7 +522,6 @@ class GoogleSheetsService {
           final mapItem = Map<String, dynamic>.from(item);
           
           if (!_isValidPendingItem(mapItem)) {
-            debugPrint('cleanupAllOfflineQueuesAndReturnCount: Removendo item inválido/sincronizado na chave $key: $item');
             continue;
           }
           
@@ -565,7 +534,6 @@ class GoogleSheetsService {
                   
           final id = (mapItem['id'] ?? mapItem['reportId'] ?? mapItem['report_id'] ?? '').toString().trim();
           if (canonicalAction != 'deletar_relatorio' && !localReportIds.contains(id)) {
-            debugPrint('cleanupAllOfflineQueuesAndReturnCount: Removendo item órfão sem relatório local $id na chave $key');
             continue;
           }
           
@@ -573,13 +541,11 @@ class GoogleSheetsService {
         }
         
         if (validItems.isEmpty) {
-          debugPrint('cleanupAllOfflineQueuesAndReturnCount: Removendo chave vazia/inválida $key');
           await prefs.remove(key);
         } else {
           if (key == _offlineQueueKey) {
             consolidatedQueue.addAll(validItems);
           } else {
-            debugPrint('cleanupAllOfflineQueuesAndReturnCount: Migrando ${validItems.length} item(s) de $key para a fila principal');
             consolidatedQueue.addAll(validItems);
             await prefs.remove(key);
           }
@@ -690,7 +656,6 @@ class GoogleSheetsService {
   /// Normaliza a fila offline conforme as regras de negócio inteligentes do aplicativo
   Future<List<Map<String, dynamic>>> normalizeOfflineQueue() async {
     final List<Map<String, dynamic>> rawQueue = await _getOfflineQueue();
-    debugPrint('Pendências offline antes da normalização: ${rawQueue.length}');
     
     // Obter IDs dos relatórios locais para verificação
     final prefs = await SharedPreferences.getInstance();
@@ -711,7 +676,6 @@ class GoogleSheetsService {
     for (final mapItem in rawQueue) {
       
       if (!_isValidPendingItem(mapItem)) {
-        debugPrint('normalizeOfflineQueue: Removendo item inválido/sincronizado: $mapItem');
         continue;
       }
 
@@ -729,7 +693,6 @@ class GoogleSheetsService {
 
       // Regra: remover item cujo relatório não existe e action não é delete
       if (canonicalAction != 'deletar_relatorio' && !localReportIds.contains(id)) {
-        debugPrint('Normalização: Removendo operação offline para relatório $id porque ele não existe mais localmente.');
         continue;
       }
 
@@ -811,7 +774,6 @@ class GoogleSheetsService {
     });
 
     await _saveOfflineQueue(normalizedList);
-    debugPrint('Offline queue normalized length: ${normalizedList.length}');
     return normalizedList;
   }
 
@@ -919,32 +881,20 @@ class GoogleSheetsService {
   /// Sincroniza a fila offline enviando item a item
   Future<void> syncOfflineData() async {
     final queue = await normalizeOfflineQueue();
-    debugPrint('Fila offline antes: ${queue.length}');
 
     if (queue.isEmpty) {
-      debugPrint('Fila offline depois: 0');
-      debugPrint('Contador final: 0');
-      debugPrint('Nenhum relatório pendente de sincronização.');
       return;
     }
 
-    debugPrint('Tentando sincronizar ${queue.length} relatórios offline...');
     var remaining = List<Map<String, dynamic>>.from(queue);
     final syncedIds = <String>{};
 
     for (final op in queue) {
       final id = op['id']?.toString() ?? '';
       final action = op['acao']?.toString() ?? '';
-      final type = op['acao_tipo']?.toString() ?? '';
-      debugPrint('Syncing op: Action=$action, Type=$type, ID=$id');
 
       try {
         final decoded = await _sendOperation(op);
-        debugPrint('RESPOSTA APPS SCRIPT SYNC: $decoded');
-        debugPrint('STATUS: ${decoded['status']}');
-        debugPrint('SUCCESS: ${decoded['success']}');
-        debugPrint('RESULTS: ${decoded['results']}');
-        debugPrint('Resposta sync offline: $decoded');
         if (_isSuccessResponse(decoded)) {
           remaining.removeWhere((item) => _sameQueueItem(item, op));
           if (action != 'deletar_relatorio' && id.isNotEmpty) {
@@ -952,7 +902,6 @@ class GoogleSheetsService {
           }
           await _markLocalReportsSynced(syncedIds);
           await _saveOfflineQueue(remaining);
-          debugPrint('Op $id sincronizada com sucesso!');
         }
       } catch (e) {
         debugPrint('Falha ao sincronizar op $id: $e');
@@ -973,11 +922,6 @@ class GoogleSheetsService {
     syncedIds.addAll(beforeReconcileIds.difference(afterReconcileIds));
     await _markLocalReportsSynced(syncedIds);
     await _saveOfflineQueue(remaining);
-    final count = await getPendingSyncCount();
-    debugPrint('Fila offline depois: ${remaining.length}');
-    debugPrint('Contador final: $count');
-    debugPrint('Sync remaining length: ${remaining.length}');
-    debugPrint('Sincronização offline concluída. Pendências restantes: ${remaining.length}');
   }
 
   /// Aliases mantidos para chamadas antigas de sincronizacao offline.
@@ -987,12 +931,8 @@ class GoogleSheetsService {
 
   Future<void> syncReportsBatch() async {
     final queue = await normalizeOfflineQueue();
-    debugPrint('Fila offline antes: ${queue.length}');
 
     if (queue.isEmpty) {
-      debugPrint('Fila offline depois: 0');
-      debugPrint('Contador final: 0');
-      debugPrint('Nenhum relatorio pendente de sincronizacao em lote.');
       return;
     }
 
@@ -1001,11 +941,6 @@ class GoogleSheetsService {
         'action': 'syncReportsBatch',
         'reports': queue,
       }, timeout: const Duration(seconds: 80));
-      debugPrint('RESPOSTA APPS SCRIPT SYNC: $decoded');
-      debugPrint('STATUS: ${decoded['status']}');
-      debugPrint('SUCCESS: ${decoded['success']}');
-      debugPrint('RESULTS: ${decoded['results']}');
-      debugPrint('Resposta sync offline: $decoded');
 
       List<Map<String, dynamic>> remaining;
       if (_isSuccessResponse(decoded)) {
@@ -1027,9 +962,6 @@ class GoogleSheetsService {
           .toSet();
       await _markLocalReportsSynced(syncedIds);
       await _saveOfflineQueue(remaining);
-      final count = await getPendingSyncCount();
-      debugPrint('Fila offline depois: ${remaining.length}');
-      debugPrint('Contador final: $count');
     } catch (e) {
       debugPrint('Falha ao sincronizar lote offline: $e');
       rethrow;
@@ -1116,15 +1048,11 @@ class GoogleSheetsService {
       final streamed = await client.send(request).timeout(timeout);
       var response = await http.Response.fromStream(streamed);
 
-      debugPrint('Apps Script status inicial: ${response.statusCode}');
-
       if (response.statusCode == 302 ||
           response.statusCode == 301 ||
           response.statusCode == 303) {
         var location = response.headers['location'];
         location ??= _extractRedirectUrlFromHtml(utf8.decode(response.bodyBytes));
-
-        debugPrint('Apps Script redirect location: $location');
 
         if (location != null && location.isNotEmpty) {
           final redirectUri = Uri.parse(location);
@@ -1137,13 +1065,7 @@ class GoogleSheetsService {
 
           response = await http.Response.fromStream(redirectedStream);
         }
-      } else {
-        debugPrint('Apps Script redirect location: null');
       }
-
-      final body = utf8.decode(response.bodyBytes);
-      debugPrint('Apps Script status final: ${response.statusCode}');
-      debugPrint('Apps Script body final: ${body.length > 1000 ? body.substring(0, 1000) : body}');
 
       return response;
     } finally {
@@ -1199,28 +1121,8 @@ class GoogleSheetsService {
   /// Nunca lança exceção: se a fila estiver corrompida, retorna 0.
   Future<int> getPendingSyncCount() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      
-      final reportsCount = _getKeyCount(prefs, _offlineQueueKey);
-      
-      int schoolsCount = _getKeyCount(prefs, 'pending_schools') + _getKeyCount(prefs, 'offline_schools');
-      int techniciansCount = _getKeyCount(prefs, 'pending_technicians') + _getKeyCount(prefs, 'offline_technicians');
-      
-      int legacyCount = 0;
-      for (final key in _legacyOfflineQueueKeys) {
-        legacyCount += _getKeyCount(prefs, key);
-      }
-      
       final queue = await normalizeOfflineQueue();
-      final total = queue.length;
-      
-      debugPrint('getPendingSyncCount reportsQueue = $reportsCount');
-      debugPrint('getPendingSyncCount schoolsQueue = $schoolsCount');
-      debugPrint('getPendingSyncCount techniciansQueue = $techniciansCount');
-      debugPrint('getPendingSyncCount legacyQueue = $legacyCount');
-      debugPrint('getPendingSyncCount total = $total');
-      
-      return total;
+      return queue.length;
     } catch (e) {
       debugPrint('Erro ao contar pendências offline (fila inválida): $e');
       return 0;
@@ -1563,7 +1465,6 @@ class GoogleSheetsService {
   // BUSCAR RELATÓRIOS DA NUVEM
   // ============================================================================
   Future<List<ReportModel>> fetchReports() async {
-    debugPrint('fetchReports iniciado');
     final Map<String, dynamic> data = {
       'action': 'buscar_relatorios',
       'payload': <String, dynamic>{},
@@ -1618,26 +1519,9 @@ class GoogleSheetsService {
             }
           }
         }
-        debugPrint('Quantidade reports convertidos: ${rows.length}');
-
         final List<ReportModel> reports = [];
         for (final row in rows) {
           try {
-            debugPrint('Convertendo relatório: id=${row['id']} numero=${row['reportNumber']}');
-            debugPrint('RAW TYPES: '
-              'subjects=${row['subjects']?.runtimeType}, '
-              'motivos=${row['motivos']?.runtimeType}, '
-              'subjectsList=${row['subjectsList']?.runtimeType}, '
-              'technicians=${row['technicians']?.runtimeType}, '
-              'tecnicos=${row['tecnicos']?.runtimeType}, '
-              'techniciansList=${row['techniciansList']?.runtimeType}, '
-              'photos=${row['photos']?.runtimeType}, '
-              'urlFotos=${row['urlFotos']?.runtimeType}, '
-              'fotosJson=${row['fotosJson']?.runtimeType}, '
-              'fotos_json=${row['fotos_json']?.runtimeType}, '
-              'Link Foto=${row['Link Foto']?.runtimeType}'
-            );
-
             // ─── NORMALIZAÇÃO DEFENSIVA: converter TODOS os campos ambíguos ───
             // O Apps Script pode retornar qualquer campo como List ou String
             // dependendo da versão deployada. JsonUtils trata ambos sem cast.
@@ -1693,23 +1577,8 @@ class GoogleSheetsService {
             );
 
             reports.add(report);
-          } catch (e, stack) {
+          } catch (e) {
             debugPrint('ERRO AO CONVERTER RELATÓRIO: $e');
-            debugPrint('LINHA COMPLETA COM ERRO: $row');
-            debugPrint('TIPOS NO ERRO: '
-              'subjects=${row['subjects']?.runtimeType}, '
-              'motivos=${row['motivos']?.runtimeType}, '
-              'subjectsList=${row['subjectsList']?.runtimeType}, '
-              'technicians=${row['technicians']?.runtimeType}, '
-              'tecnicos=${row['tecnicos']?.runtimeType}, '
-              'techniciansList=${row['techniciansList']?.runtimeType}, '
-              'photos=${row['photos']?.runtimeType}, '
-              'urlFotos=${row['urlFotos']?.runtimeType}, '
-              'fotosJson=${row['fotosJson']?.runtimeType}, '
-              'fotos_json=${row['fotos_json']?.runtimeType}, '
-              'Link Foto=${row['Link Foto']?.runtimeType}'
-            );
-            debugPrintStack(stackTrace: stack);
             throw Exception('Falha ao ler relatório do Sheets: $e');
           }
         }
@@ -1904,14 +1773,6 @@ class GoogleSheetsService {
     final body = utf8.decode(response.bodyBytes);
     final contentType = response.headers['content-type']?.toLowerCase() ?? '';
     
-    debugPrint('Apps Script status: ${response.statusCode}');
-    final snippet = body.substring(0, body.length > 500 ? 500 : body.length);
-    debugPrint('Apps Script response: $snippet');
-    debugPrint('========== RESPOSTA APPS SCRIPT SYNC ==========');
-    debugPrint('URL: $_scriptUrl');
-    debugPrint('STATUS CODE: ${response.statusCode}');
-    debugPrint('BODY RAW: ${body.length > 1000 ? body.substring(0, 1000) : body}');
-
     final trimmedLeft = body.trimLeft();
     final lowerBody = trimmedLeft.toLowerCase();
     if (contentType.contains('text/html') ||
@@ -1927,21 +1788,8 @@ class GoogleSheetsService {
     dynamic rawDecoded;
     try {
       rawDecoded = jsonDecode(body);
-      debugPrint('DECODED TYPE: ${rawDecoded.runtimeType}');
-      debugPrint('DECODED: $rawDecoded');
-
-      if (rawDecoded is Map) {
-        debugPrint('DECODED status: ${rawDecoded['status']}');
-        debugPrint('DECODED success: ${rawDecoded['success']}');
-        debugPrint('DECODED message: ${rawDecoded['message']}');
-        debugPrint('DECODED id: ${rawDecoded['id']}');
-        debugPrint('DECODED results: ${rawDecoded['results']}');
-      }
-
-      debugPrint('===============================================');
     } catch (e, stack) {
       debugPrint('ERRO AO DECODIFICAR RESPOSTA APPS SCRIPT: $e');
-      debugPrint('BODY QUE FALHOU: ${body.length > 1000 ? body.substring(0, 1000) : body}');
       debugPrintStack(stackTrace: stack);
       rethrow;
     }

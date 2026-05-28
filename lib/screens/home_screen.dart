@@ -350,14 +350,6 @@ class _HomeScreenState extends State<HomeScreen> {
       // 2. Baixa a versão mais atual do Google Sheets
       final cloudReports = await _sheetsService.fetchReports();
 
-      // Diagnóstico pós-fetchReports (Regra 4)
-      debugPrint('HomeScreen: cloudReports carregados via sync. Quantidade: ${cloudReports.length}');
-      for (final r in cloudReports) {
-        debugPrint('Report ID: ${r.id}, Numero: ${r.reportNumber}');
-        debugPrint('Subjects: ${r.subjects.runtimeType} -> ${r.subjects}');
-        debugPrint('Technicians: ${r.technicians.runtimeType} -> ${r.technicians}');
-      }
-
       // 3. Reconciliação robusta
       final pendingCreateIds = await _sheetsService.getPendingCreateIds();
       final pendingUpdateIds = await _sheetsService.getPendingUpdateIds();
@@ -435,13 +427,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final cloudReports = await _sheetsService.fetchReports();
 
-    debugPrint('HomeScreen: cloudReports carregados via sync. Quantidade: ${cloudReports.length}');
-    for (final r in cloudReports) {
-      debugPrint('Report ID: ${r.id}, Numero: ${r.reportNumber}');
-      debugPrint('Subjects: ${r.subjects.runtimeType} -> ${r.subjects}');
-      debugPrint('Technicians: ${r.technicians.runtimeType} -> ${r.technicians}');
-    }
-
     final pendingCreateIds = await _sheetsService.getPendingCreateIds();
     final pendingUpdateIds = await _sheetsService.getPendingUpdateIds();
     final pendingDeleteIds = await _sheetsService.getPendingDeleteIds();
@@ -480,7 +465,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _runSync({bool manual = false}) async {
     if (_isSyncing) return;
 
-    debugPrint('SYNC START manual=$manual');
     if (mounted) {
       setState(() {
         _isSyncing = true;
@@ -508,10 +492,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SnackBar(content: Text('Sincronizado agora')),
         );
       }
-    } catch (e, stack) {
-      debugPrint('SYNC ERROR manual=$manual: $e');
-      debugPrintStack(stackTrace: stack);
-
+    } catch (e) {
       if (!mounted) return;
 
       final msg = e.toString().toLowerCase();
@@ -543,7 +524,6 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
       await _updateSyncCount();
-      debugPrint('SYNC END manual=$manual count=$_pendingSyncCount');
     }
   }
 
@@ -600,13 +580,6 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final cloudReports = await _sheetsService.fetchReports();
 
-      // Diagnóstico pós-fetchReports (Regra 4)
-      debugPrint('HomeScreen: cloudReports carregados via download. Quantidade: ${cloudReports.length}');
-      for (final r in cloudReports) {
-        debugPrint('Report ID: ${r.id}, Numero: ${r.reportNumber}');
-        debugPrint('Subjects: ${r.subjects.runtimeType} -> ${r.subjects}');
-        debugPrint('Technicians: ${r.technicians.runtimeType} -> ${r.technicians}');
-      }
       final uniqueCloud = _dedupeReportsById(cloudReports);
 
       if (reconcile) {
