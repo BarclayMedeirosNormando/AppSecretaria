@@ -95,7 +95,6 @@ class _HomeScreenState extends State<HomeScreen> {
         if (reportsChanged) {
           await _saveReportsToPrefs();
         }
-        debugPrint('HOME BADGE pendingSyncCount = $_pendingSyncCount');
       }
     } catch (e) {
       debugPrint('Erro ao atualizar contador de pendências: $e');

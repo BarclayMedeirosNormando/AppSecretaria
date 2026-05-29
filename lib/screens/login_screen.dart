@@ -183,8 +183,6 @@ class _LoginScreenState extends State<LoginScreen> {
           final requiredVersion = updateInfo['requiredVersion'] ?? '';
           final link = updateInfo['downloadLink'] ?? '';
 
-          debugPrint('Versão App: $appVersion | Versão Drive Requerida: $requiredVersion | Link: $link');
-
           if (requiredVersion.isNotEmpty && _isVersionLower(appVersion, requiredVersion)) {
             if (link.isEmpty) {
               _showMissingPlatformLinkDialog(requiredVersion);
@@ -210,8 +208,6 @@ class _LoginScreenState extends State<LoginScreen> {
         final updateInfo = _resolveUpdateInfo(result);
         final requiredVersion = updateInfo['requiredVersion'] ?? '';
         final link = updateInfo['downloadLink'] ?? '';
-
-        debugPrint('Versão App: $appVersion | Versão Planilha Requerida: $requiredVersion | Link: $link');
 
         if (requiredVersion.isNotEmpty && _isVersionLower(appVersion, requiredVersion)) {
           if (link.isEmpty) {

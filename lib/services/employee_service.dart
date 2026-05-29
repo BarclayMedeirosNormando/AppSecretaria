@@ -89,7 +89,6 @@ class EmployeeService {
         _cacheKey,
         jsonEncode(data),
       );
-      debugPrint('Funcionários atualizados do Sheets: ${_employees.length}');
     } catch (e) {
       debugPrint('Erro ao atualizar funcionários do Sheets: $e');
     }
