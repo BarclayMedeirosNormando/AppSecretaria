@@ -141,11 +141,8 @@ class PdfGenerator {
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.symmetric(horizontal: 32, vertical: 32),
           build: (pw.Context context) => [
-            pw.Text(
-              'Anexos - Fotos da Visita',
-              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 16),
+            _sectionTitle('3. ANEXOS - FOTOS DA VISITA'),
+            pw.SizedBox(height: 6),
             ...pdfPhotos.map(
               (entry) => pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -294,7 +291,7 @@ class PdfGenerator {
                   ),
                   pw.SizedBox(height: 3),
                   pw.Text(
-                    'GTECI - Gerência de TI e Comunicação',
+                    'GTECI - Gerência de Tecnologia da Informação',
                     style: const pw.TextStyle(fontSize: 10),
                   ),
                   pw.SizedBox(height: 2),
@@ -407,20 +404,25 @@ class PdfGenerator {
     );
   }
 
+  static pw.TextStyle _sectionTitleStyle() {
+    return pw.TextStyle(
+      fontSize: 13,
+      fontWeight: pw.FontWeight.bold,
+      color: _brandBlue,
+    );
+  }
+
+  static pw.Widget _sectionTitle(String text) {
+    return pw.Text(text, style: _sectionTitleStyle());
+  }
+
   static pw.Widget _buildReportDetails(ReportModel report) {
     final visitDate = DateFormat('dd/MM/yyyy').format(report.visitDate);
 
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          '1. IDENTIFICAÇÃO DA VISITA',
-          style: pw.TextStyle(
-            fontSize: 13,
-            fontWeight: pw.FontWeight.bold,
-            color: _brandBlue,
-          ),
-        ),
+        _sectionTitle('1. IDENTIFICAÇÃO DA VISITA'),
         pw.SizedBox(height: 6),
         pw.Column(
           children: [
@@ -451,11 +453,12 @@ class PdfGenerator {
               _joinOrDefault(report.technicians),
               boldValue: true,
             ),
-            _fullInfoTable(
-              'Responsável pela escola',
-              _valueOrDefault(report.responsiblePerson),
-              boldValue: true,
-            ),
+            if (!report.isTechnicalAnalysis)
+              _fullInfoTable(
+                'Responsável pela escola',
+                _valueOrDefault(report.responsiblePerson),
+                boldValue: true,
+              ),
           ],
         ),
       ],
@@ -548,10 +551,7 @@ class PdfGenerator {
     });
 
     return [
-      pw.Text(
-        'Observações / Diagnóstico Técnico:',
-        style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
-      ),
+      _sectionTitle('2. OBSERVAÇÕES / DIAGNÓSTICO TÉCNICO'),
       pw.SizedBox(height: 6),
       pw.Paragraph(
         text: _s(obs),
@@ -568,10 +568,7 @@ class PdfGenerator {
     }
 
     return [
-      pw.Text(
-        'Materiais de TI necessários',
-        style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
-      ),
+      _sectionTitle('Materiais de TI necessários'),
       pw.SizedBox(height: 8),
       ...grouped.entries.expand(
         (entry) => [
@@ -581,7 +578,7 @@ class PdfGenerator {
           ),
           pw.SizedBox(height: 4),
           pw.Table(
-            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+            border: pw.TableBorder.all(color: _borderColor, width: 0.5),
             columnWidths: const {
               0: pw.FlexColumnWidth(2),
               1: pw.FlexColumnWidth(2),
@@ -590,21 +587,20 @@ class PdfGenerator {
             },
             children: [
               pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.grey200),
                 children: [
-                  _tableCell('Equipamento/Material', bold: true),
-                  _tableCell('Marca/Modelo', bold: true),
-                  _tableCell('Quantidade', bold: true),
-                  _tableCell('Observação', bold: true),
+                  _labelCell('Equipamento/Material'),
+                  _labelCell('Marca/Modelo'),
+                  _labelCell('Quantidade'),
+                  _labelCell('Observação'),
                 ],
               ),
               ...entry.value.map(
                 (item) => pw.TableRow(
                   children: [
-                    _tableCell(item.equipamento),
-                    _tableCell(item.marcaModelo),
-                    _tableCell(item.quantidade),
-                    _tableCell(item.observacao),
+                    _valueCell(_valueOrDefault(item.equipamento)),
+                    _valueCell(_valueOrDefault(item.marcaModelo)),
+                    _valueCell(_valueOrDefault(item.quantidade)),
+                    _valueCell(_valueOrDefault(item.observacao)),
                   ],
                 ),
               ),
@@ -614,19 +610,6 @@ class PdfGenerator {
         ],
       ),
     ];
-  }
-
-  static pw.Widget _tableCell(String value, {bool bold = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(5),
-      child: pw.Text(
-        _s(value),
-        style: pw.TextStyle(
-          fontSize: 9,
-          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-        ),
-      ),
-    );
   }
 
   static pw.Widget _buildSignatureSection(
