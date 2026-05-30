@@ -10,17 +10,33 @@ class PhotoItem {
 
   PhotoItem({required this.path, this.comment});
 
-  Map<String, dynamic> toJson() => {
-        'path': path,
-        'comment': comment,
-      };
+  Map<String, dynamic> toJson() => {'path': path, 'comment': comment};
 
   factory PhotoItem.fromJson(Map<String, dynamic> json) => PhotoItem(
-        path: fixMojibake((json['path'] ?? json['url'] ?? json['link'] ?? json['fileUrl'] ?? json['downloadUrl'] ?? '').toString()),
-        comment: (json['comment'] ?? json['comentario'] ?? json['description'] ?? json['legenda']) == null
-            ? null
-            : fixMojibake((json['comment'] ?? json['comentario'] ?? json['description'] ?? json['legenda']).toString()),
-      );
+    path: fixMojibake(
+      (json['path'] ??
+              json['url'] ??
+              json['link'] ??
+              json['fileUrl'] ??
+              json['downloadUrl'] ??
+              '')
+          .toString(),
+    ),
+    comment:
+        (json['comment'] ??
+                json['comentario'] ??
+                json['description'] ??
+                json['legenda']) ==
+            null
+        ? null
+        : fixMojibake(
+            (json['comment'] ??
+                    json['comentario'] ??
+                    json['description'] ??
+                    json['legenda'])
+                .toString(),
+          ),
+  );
 }
 
 class TiMaterialItem {
@@ -39,27 +55,39 @@ class TiMaterialItem {
   });
 
   Map<String, dynamic> toJson() => {
-        'ambiente': ambiente,
-        'equipamento': equipamento,
-        'marcaModelo': marcaModelo,
-        'quantidade': quantidade,
-        'observacao': observacao,
-      };
+    'ambiente': ambiente,
+    'equipamento': equipamento,
+    'marcaModelo': marcaModelo,
+    'quantidade': quantidade,
+    'observacao': observacao,
+  };
 
   factory TiMaterialItem.fromJson(Map<String, dynamic> json) => TiMaterialItem(
-        ambiente: fixMojibake(JsonUtils.asString(json['ambiente']).trim()),
-        equipamento: fixMojibake(JsonUtils.asString(json['equipamento'] ?? json['material']).trim()),
-        marcaModelo: fixMojibake(JsonUtils.asString(json['marcaModelo'] ?? json['marca_modelo'] ?? json['marca']).trim()),
-        quantidade: fixMojibake(JsonUtils.asString(json['quantidade']).trim()),
-        observacao: fixMojibake(JsonUtils.asString(json['observacao'] ?? json['observação'] ?? json['observacoes']).trim()),
-      );
+    ambiente: fixMojibake(JsonUtils.asString(json['ambiente']).trim()),
+    equipamento: fixMojibake(
+      JsonUtils.asString(json['equipamento'] ?? json['material']).trim(),
+    ),
+    marcaModelo: fixMojibake(
+      JsonUtils.asString(
+        json['marcaModelo'] ?? json['marca_modelo'] ?? json['marca'],
+      ).trim(),
+    ),
+    quantidade: fixMojibake(JsonUtils.asString(json['quantidade']).trim()),
+    observacao: fixMojibake(
+      JsonUtils.asString(
+        json['observacao'] ?? json['observação'] ?? json['observacoes'],
+      ).trim(),
+    ),
+  );
 }
 
 class ReportModel {
-    // Compatibility wrappers for legacy calls
+  // Compatibility wrappers for legacy calls
   static String asString(dynamic value) => JsonUtils.asString(value);
-  static String? asNullableString(dynamic value) => JsonUtils.asNullableString(value);
-  static List<String> asStringList(dynamic value) => JsonUtils.asStringList(value);
+  static String? asNullableString(dynamic value) =>
+      JsonUtils.asNullableString(value);
+  static List<String> asStringList(dynamic value) =>
+      JsonUtils.asStringList(value);
 
   final String id;
   final String reportNumber;
@@ -116,7 +144,9 @@ class ReportModel {
     this.lastSyncedAt,
     this.localUpdatedAt,
     this.updatedAt,
-  }) : reportNumber = reportNumber ?? 'REL-${DateTime.now().millisecondsSinceEpoch.toString().substring(3)}';
+  }) : reportNumber =
+           reportNumber ??
+           'REL-${DateTime.now().millisecondsSinceEpoch.toString().substring(3)}';
 
   ReportModel copyWith({
     String? id,
@@ -173,42 +203,52 @@ class ReportModel {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'reportNumber': reportNumber,
-        'isTechnicalAnalysis': isTechnicalAnalysis,
-        'creator': creator,
-        'schoolName': schoolName,
-        'schoolAddress': schoolAddress,
-        'schoolCity': schoolCity,
-        'schoolInep': schoolInep,
-        'inep': schoolInep,
-        'visitDate': visitDate.toIso8601String(),
-        'subjects': subjects,
-        'observations': observations,
-        'tiMaterials': tiMaterials.map((item) => item.toJson()).toList(),
-        'materiais_ti_json': jsonEncode(tiMaterials.map((item) => item.toJson()).toList()),
-        'gre': gre,
-        'photos': photos.map((p) => p.toJson()).toList(),
-        'urlFotos': urlFotos ?? photos.map((p) => p.path).where((p) => p.startsWith('http')).join(', '),
-        'fotosJson': fotosJson ?? jsonEncode(photos.map((p) => {
-              'url': p.path,
-              'comment': p.comment ?? '',
-            }).toList()),
-        'technicians': technicians,
-        'responsiblePerson': responsiblePerson,
-        'signatureBytes': signatureBytes != null ? base64Encode(signatureBytes!) : null,
-        'signatureUrl': signatureUrl,
-        'urlAssinatura': signatureUrl,
-        'syncStatus': syncStatus,
-        'lastSyncedAt': lastSyncedAt?.toIso8601String(),
-        'localUpdatedAt': localUpdatedAt?.toIso8601String(),
-        'updatedAt': updatedAt?.toIso8601String(),
-      };
+    'id': id,
+    'reportNumber': reportNumber,
+    'isTechnicalAnalysis': isTechnicalAnalysis,
+    'creator': creator,
+    'schoolName': schoolName,
+    'schoolAddress': schoolAddress,
+    'schoolCity': schoolCity,
+    'schoolInep': schoolInep,
+    'inep': schoolInep,
+    'visitDate': visitDate.toIso8601String(),
+    'subjects': subjects,
+    'observations': observations,
+    'tiMaterials': tiMaterials.map((item) => item.toJson()).toList(),
+    'materiais_ti_json': jsonEncode(
+      tiMaterials.map((item) => item.toJson()).toList(),
+    ),
+    'gre': gre,
+    'photos': photos.map((p) => p.toJson()).toList(),
+    'urlFotos':
+        urlFotos ??
+        photos.map((p) => p.path).where((p) => p.startsWith('http')).join(', '),
+    'fotosJson':
+        fotosJson ??
+        jsonEncode(
+          photos
+              .map((p) => {'url': p.path, 'comment': p.comment ?? ''})
+              .toList(),
+        ),
+    'technicians': technicians,
+    'responsiblePerson': responsiblePerson,
+    'signatureBytes': signatureBytes != null
+        ? base64Encode(signatureBytes!)
+        : null,
+    'signatureUrl': signatureUrl,
+    'urlAssinatura': signatureUrl,
+    'syncStatus': syncStatus,
+    'lastSyncedAt': lastSyncedAt?.toIso8601String(),
+    'localUpdatedAt': localUpdatedAt?.toIso8601String(),
+    'updatedAt': updatedAt?.toIso8601String(),
+  };
 
   static String _resolveDriveUrl(String url) {
     final trimmed = url.trim();
     if (trimmed.contains('drive.google.com')) {
-      final fileMatch = RegExp(r'/file/d/([a-zA-Z0-9_-]+)').firstMatch(trimmed) ??
+      final fileMatch =
+          RegExp(r'/file/d/([a-zA-Z0-9_-]+)').firstMatch(trimmed) ??
           RegExp(r'/d/([a-zA-Z0-9_-]+)').firstMatch(trimmed);
       if (fileMatch != null) {
         final id = fileMatch.group(1);
@@ -227,24 +267,52 @@ class ReportModel {
     final result = <PhotoItem>[];
 
     final photosValue = json['photos'] ?? json['fotos'];
-    final fotosJsonValue = json['fotosJson'] ?? json['fotos_json'] ?? json['Fotos JSON'] ?? json['FOTOS_JSON'];
-    final urlFotosValue = json['urlFotos'] ?? json['Link Foto'] ?? json['Link Fotos'] ?? json['url_fotos'];
+    final fotosJsonValue =
+        json['fotosJson'] ??
+        json['fotos_json'] ??
+        json['Fotos JSON'] ??
+        json['FOTOS_JSON'];
+    final urlFotosValue =
+        json['urlFotos'] ??
+        json['Link Foto'] ??
+        json['Link Fotos'] ??
+        json['url_fotos'];
 
     void addPhoto(String path, [String? comment]) {
       final cleanPath = _resolveDriveUrl(path);
-      if (cleanPath.isEmpty || cleanPath.contains('drive.google.com/drive/folders')) return;
-      result.add(PhotoItem(
-        path: fixMojibake(cleanPath),
-        comment: comment != null && comment.trim().isNotEmpty ? fixMojibake(comment.trim()) : null,
-      ));
+      if (cleanPath.isEmpty ||
+          cleanPath.contains('drive.google.com/drive/folders')) {
+        return;
+      }
+      result.add(
+        PhotoItem(
+          path: fixMojibake(cleanPath),
+          comment: comment != null && comment.trim().isNotEmpty
+              ? fixMojibake(comment.trim())
+              : null,
+        ),
+      );
     }
 
     if (photosValue is List) {
       for (final item in photosValue) {
         if (item is Map) {
           final map = Map<String, dynamic>.from(item);
-          final path = JsonUtils.asString(map['path'] ?? map['url'] ?? map['link'] ?? map['fileUrl'] ?? map['downloadUrl'] ?? map['base64']);
-          final comment = JsonUtils.asString(map['comment'] ?? map['comentario'] ?? map['description'] ?? map['legenda'] ?? map['descricao']);
+          final path = JsonUtils.asString(
+            map['path'] ??
+                map['url'] ??
+                map['link'] ??
+                map['fileUrl'] ??
+                map['downloadUrl'] ??
+                map['base64'],
+          );
+          final comment = JsonUtils.asString(
+            map['comment'] ??
+                map['comentario'] ??
+                map['description'] ??
+                map['legenda'] ??
+                map['descricao'],
+          );
           addPhoto(path, comment);
         } else if (item != null) {
           addPhoto(JsonUtils.asString(item));
@@ -260,8 +328,21 @@ class ReportModel {
               for (final item in decoded) {
                 if (item is Map) {
                   final map = Map<String, dynamic>.from(item);
-                  final path = JsonUtils.asString(map['path'] ?? map['url'] ?? map['link'] ?? map['fileUrl'] ?? map['downloadUrl'] ?? map['base64']);
-                  final comment = JsonUtils.asString(map['comment'] ?? map['comentario'] ?? map['description'] ?? map['legenda'] ?? map['descricao']);
+                  final path = JsonUtils.asString(
+                    map['path'] ??
+                        map['url'] ??
+                        map['link'] ??
+                        map['fileUrl'] ??
+                        map['downloadUrl'] ??
+                        map['base64'],
+                  );
+                  final comment = JsonUtils.asString(
+                    map['comment'] ??
+                        map['comentario'] ??
+                        map['description'] ??
+                        map['legenda'] ??
+                        map['descricao'],
+                  );
                   addPhoto(path, comment);
                 }
               }
@@ -281,8 +362,21 @@ class ReportModel {
           for (final item in decoded) {
             if (item is Map) {
               final map = Map<String, dynamic>.from(item);
-              final path = JsonUtils.asString(map['path'] ?? map['url'] ?? map['link'] ?? map['fileUrl'] ?? map['downloadUrl'] ?? map['base64']);
-              final comment = JsonUtils.asString(map['comment'] ?? map['comentario'] ?? map['description'] ?? map['legenda'] ?? map['descricao']);
+              final path = JsonUtils.asString(
+                map['path'] ??
+                    map['url'] ??
+                    map['link'] ??
+                    map['fileUrl'] ??
+                    map['downloadUrl'] ??
+                    map['base64'],
+              );
+              final comment = JsonUtils.asString(
+                map['comment'] ??
+                    map['comentario'] ??
+                    map['description'] ??
+                    map['legenda'] ??
+                    map['descricao'],
+              );
               addPhoto(path, comment);
             }
           }
@@ -318,8 +412,11 @@ class ReportModel {
     return unique.values.toList();
   }
 
-  static List<TiMaterialItem> parseTiMaterialsFromJson(Map<String, dynamic> json) {
-    final value = json['tiMaterials'] ??
+  static List<TiMaterialItem> parseTiMaterialsFromJson(
+    Map<String, dynamic> json,
+  ) {
+    final value =
+        json['tiMaterials'] ??
         json['materiais_ti_json'] ??
         json['materiaisTiJson'] ??
         json['materiaisTIJson'] ??
@@ -359,7 +456,9 @@ class ReportModel {
   }
 
   static Uint8List? _readSignatureBytes(Map<String, dynamic> json) {
-    final source = JsonUtils.asNullableString(json['signatureBytes'] ?? json['assinaturaBase64']);
+    final source = JsonUtils.asNullableString(
+      json['signatureBytes'] ?? json['assinaturaBase64'],
+    );
     if (source == null) return null;
     try {
       final clean = source.contains(',') ? source.split(',').last : source;
@@ -370,38 +469,131 @@ class ReportModel {
   }
 
   factory ReportModel.fromJson(Map<String, dynamic> json) {
-    final visitDate = _tryParseDate(json['visitDate'] ?? json['dataVisita'] ?? json['data_visita']) ?? DateTime.now();
-    final typeText = JsonUtils.asString(json['tipo'] ?? json['tipo_relatorio'] ?? json['Tipo de Relatório']).trim().toLowerCase();
+    final visitDate =
+        _tryParseDate(
+          json['visitDate'] ?? json['dataVisita'] ?? json['data_visita'],
+        ) ??
+        DateTime.now();
+    final typeText = JsonUtils.asString(
+      json['tipo'] ?? json['tipo_relatorio'] ?? json['Tipo de Relatório'],
+    ).trim().toLowerCase();
     final isTechnicalValue = json['isTechnicalAnalysis'];
     final isTechnical = isTechnicalValue is bool
         ? isTechnicalValue
-        : !(typeText.contains('nao') || typeText.contains('não') || typeText.contains('nÃ£o'));
+        : !(typeText.contains('nao') ||
+              typeText.contains('não') ||
+              typeText.contains('nÃ£o'));
+
+    String fixedString(dynamic value) =>
+        fixMojibake(JsonUtils.asString(value).trim());
+    String? fixedNullableString(dynamic value) {
+      final text = JsonUtils.asNullableString(value);
+      return text == null ? null : fixMojibake(text);
+    }
+
+    List<String> fixedStringList(dynamic value) =>
+        JsonUtils.asStringList(value).map(fixMojibake).toList();
 
     return ReportModel(
-      id: JsonUtils.asString(json['id'] ?? json['ID do Relatório']).trim(),
-      reportNumber: JsonUtils.asNullableString(json['reportNumber'] ?? json['numeroRelatorio'] ?? json['numero_relatorio'] ?? json['Número do Relatório'] ?? json['Numero do Relatorio']),
+      id: fixedString(json['id'] ?? json['ID do Relatório']),
+      reportNumber: fixedNullableString(
+        json['reportNumber'] ??
+            json['numeroRelatorio'] ??
+            json['numero_relatorio'] ??
+            json['Número do Relatório'] ??
+            json['Numero do Relatorio'],
+      ),
       isTechnicalAnalysis: isTechnical,
-      creator: JsonUtils.asNullableString(json['creator'] ?? json['usuario'] ?? json['usuario_logado'] ?? json['Usuario Logado'] ?? json['Usuário Logado']) ?? 'Desconhecido',
-      schoolName: JsonUtils.asString(json['schoolName'] ?? json['escola'] ?? json['Nome da Escola']).trim(),
-      schoolAddress: JsonUtils.asNullableString(json['schoolAddress'] ?? json['endereco'] ?? json['endereco_escola'] ?? json['Endereco da Escola'] ?? json['Endereço da Escola']),
-      schoolCity: JsonUtils.asNullableString(json['schoolCity'] ?? json['municipio'] ?? json['município'] ?? json['municipioEscola'] ?? json['cidade'] ?? json['city'] ?? json['Município'] ?? json['Municipio'] ?? json['Cidade']),
-      schoolInep: JsonUtils.asNullableString(json['schoolInep'] ?? json['inep'] ?? json['INEP'] ?? json['codigoInep'] ?? json['códigoInep'] ?? json['codInep'] ?? json['inepEscola'] ?? json['INEP Escola'] ?? json['Código INEP']),
+      creator:
+          fixedNullableString(
+            json['creator'] ??
+                json['usuario'] ??
+                json['usuario_logado'] ??
+                json['Usuario Logado'] ??
+                json['Usuário Logado'],
+          ) ??
+          'Desconhecido',
+      schoolName: fixedString(
+        json['schoolName'] ?? json['escola'] ?? json['Nome da Escola'],
+      ),
+      schoolAddress: fixedNullableString(
+        json['schoolAddress'] ??
+            json['endereco'] ??
+            json['endereco_escola'] ??
+            json['Endereco da Escola'] ??
+            json['Endereço da Escola'],
+      ),
+      schoolCity: fixedNullableString(
+        json['schoolCity'] ??
+            json['municipio'] ??
+            json['município'] ??
+            json['municipioEscola'] ??
+            json['cidade'] ??
+            json['city'] ??
+            json['Município'] ??
+            json['Municipio'] ??
+            json['Cidade'],
+      ),
+      schoolInep: fixedNullableString(
+        json['schoolInep'] ??
+            json['inep'] ??
+            json['INEP'] ??
+            json['codigoInep'] ??
+            json['códigoInep'] ??
+            json['codInep'] ??
+            json['inepEscola'] ??
+            json['INEP Escola'] ??
+            json['Código INEP'],
+      ),
       visitDate: visitDate,
-      subjects: JsonUtils.asStringList(json['subjects'] ?? json['motivos'] ?? json['Motivos / Assuntos']),
-      observations: JsonUtils.asNullableString(json['observations'] ?? json['observacoes'] ?? json['Observações'] ?? json['Observacoes']),
+      subjects: fixedStringList(
+        json['subjects'] ?? json['motivos'] ?? json['Motivos / Assuntos'],
+      ),
+      observations: fixedNullableString(
+        json['observations'] ??
+            json['observacoes'] ??
+            json['Observações'] ??
+            json['Observacoes'],
+      ),
       tiMaterials: parseTiMaterialsFromJson(json),
-      gre: JsonUtils.asNullableString(json['gre'] ?? json['GRE'] ?? json['Regional (GRE)']),
+      gre: fixedNullableString(
+        json['gre'] ?? json['GRE'] ?? json['Regional (GRE)'],
+      ),
       photos: parsePhotosFromJson(json),
-      urlFotos: JsonUtils.asNullableString(json['urlFotos'] ?? json['Link Foto'] ?? json['Link Fotos']),
-      fotosJson: JsonUtils.asNullableString(json['fotosJson'] ?? json['Fotos JSON'] ?? json['FOTOS_JSON'] ?? json['fotos_json']),
-      technicians: JsonUtils.asStringList(json['technicians'] ?? json['tecnicos'] ?? json['Técnicos Presentes'] ?? json['Tecnicos Presentes']),
-      responsiblePerson: JsonUtils.asNullableString(json['responsiblePerson'] ?? json['responsavel'] ?? json['Responsável da Escola'] ?? json['Responsavel da Escola']),
+      urlFotos: fixedNullableString(
+        json['urlFotos'] ?? json['Link Foto'] ?? json['Link Fotos'],
+      ),
+      fotosJson: fixedNullableString(
+        json['fotosJson'] ??
+            json['Fotos JSON'] ??
+            json['FOTOS_JSON'] ??
+            json['fotos_json'],
+      ),
+      technicians: fixedStringList(
+        json['technicians'] ??
+            json['tecnicos'] ??
+            json['Técnicos Presentes'] ??
+            json['Tecnicos Presentes'],
+      ),
+      responsiblePerson: fixedNullableString(
+        json['responsiblePerson'] ??
+            json['responsavel'] ??
+            json['Responsável da Escola'] ??
+            json['Responsavel da Escola'],
+      ),
       signatureBytes: _readSignatureBytes(json),
-      signatureUrl: JsonUtils.asNullableString(json['signatureUrl'] ?? json['urlAssinatura'] ?? json['Link Assinatura'] ?? json['URL_ASSINATURA']),
-      syncStatus: JsonUtils.asString(json['syncStatus'] ?? 'synced'),
+      signatureUrl: fixedNullableString(
+        json['signatureUrl'] ??
+            json['urlAssinatura'] ??
+            json['Link Assinatura'] ??
+            json['URL_ASSINATURA'],
+      ),
+      syncStatus: fixedString(json['syncStatus'] ?? 'synced'),
       lastSyncedAt: _tryParseDate(json['lastSyncedAt']),
       localUpdatedAt: _tryParseDate(json['localUpdatedAt']),
-      updatedAt: _tryParseDate(json['updatedAt'] ?? json['dataEnvio'] ?? json['dataRegistro']),
+      updatedAt: _tryParseDate(
+        json['updatedAt'] ?? json['dataEnvio'] ?? json['dataRegistro'],
+      ),
     );
   }
 }
