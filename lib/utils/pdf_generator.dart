@@ -70,11 +70,13 @@ class PdfGenerator {
       theme: pw.ThemeData.withFont(base: regularFont, bold: boldFont),
     );
 
-    debugPrint('Gerando PDF relatorio: ${report.id}');
-    debugPrint('Fotos no report: ${report.photos.length}');
-    debugPrint('Assinatura bytes: ${report.signatureBytes != null}');
-    debugPrint('Assinatura URL: ${report.signatureUrl}');
-    debugPrint('includeImages: $includeImages');
+    if (kDebugMode) {
+      debugPrint('Gerando PDF relatorio: ${report.id}');
+      debugPrint('Fotos no report: ${report.photos.length}');
+      debugPrint('Assinatura bytes: ${report.signatureBytes != null}');
+      debugPrint('Assinatura URL: ${report.signatureUrl}');
+      debugPrint('includeImages: $includeImages');
+    }
 
     Uint8List? brasaoBytes;
     try {

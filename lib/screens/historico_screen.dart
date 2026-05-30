@@ -41,7 +41,6 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     setState(() => _isLoading = true);
     try {
       final data = await _sheetsService.fetchHistory();
-      debugPrint('Histórico recebido: ${data.length}');
       if (mounted) {
         setState(() {
           _allHistory = data;
@@ -67,7 +66,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
   String _fmt(String? iso) {
     if (iso == null || iso.isEmpty) return '—';
     try {
-      return DateFormat('dd/MM/yyyy HH:mm').format(DateTime.parse(iso).toLocal());
+      return DateFormat(
+        'dd/MM/yyyy HH:mm',
+      ).format(DateTime.parse(iso).toLocal());
     } catch (_) {
       return iso;
     }
@@ -88,17 +89,19 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     } else {
       final q = _normalizeSearchText(_searchQuery);
       _filtered = _allHistory.where((h) {
-        final searchable = _normalizeSearchText([
-          _safeReportNumber(h),
-          h['escola'],
-          h['schoolName'],
-          h['usuario'],
-          h['editadoPor'],
-          h['tecnicos'],
-          h['technicians'],
-          h['Técnicos Presentes'],
-          h['Tecnicos Presentes'],
-        ].whereType<Object>().join(' '));
+        final searchable = _normalizeSearchText(
+          [
+            _safeReportNumber(h),
+            h['escola'],
+            h['schoolName'],
+            h['usuario'],
+            h['editadoPor'],
+            h['tecnicos'],
+            h['technicians'],
+            h['Técnicos Presentes'],
+            h['Tecnicos Presentes'],
+          ].whereType<Object>().join(' '),
+        );
         return searchable.contains(q);
       }).toList();
     }
@@ -118,7 +121,13 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
   }
 
   String _safeReportNumber(Map<String, dynamic> h) {
-    final numRel = h['numeroRelatorio'] ?? h['numero_relatorio'] ?? h['reportNumber'] ?? h['Número do Relatório'] ?? h['Numero do Relatorio'] ?? '';
+    final numRel =
+        h['numeroRelatorio'] ??
+        h['numero_relatorio'] ??
+        h['reportNumber'] ??
+        h['Número do Relatório'] ??
+        h['Numero do Relatorio'] ??
+        '';
     final String strVal = numRel.toString().trim();
     if (strVal.isNotEmpty) return strVal;
     // fallback to ID
@@ -127,7 +136,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     return idStr.isNotEmpty ? idStr : 'Sem número';
   }
 
-  Map<String, List<Map<String, dynamic>>> _groupHistoryByReportNumber(List<Map<String, dynamic>> list) {
+  Map<String, List<Map<String, dynamic>>> _groupHistoryByReportNumber(
+    List<Map<String, dynamic>> list,
+  ) {
     final grouped = <String, List<Map<String, dynamic>>>{};
     for (final item in list) {
       final numRel = _safeReportNumber(item);
@@ -146,30 +157,22 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     return DateTime.tryParse(str) ?? DateTime.fromMillisecondsSinceEpoch(0);
   }
 
-  List<String> _getSortedReportNumbers(Map<String, List<Map<String, dynamic>>> grouped) {
+  List<String> _getSortedReportNumbers(
+    Map<String, List<Map<String, dynamic>>> grouped,
+  ) {
     final keys = grouped.keys.toList();
     keys.sort((a, b) {
       final listA = grouped[a]!;
       final listB = grouped[b]!;
-      final dateA = listA.isNotEmpty ? _parseSnapshotDate(listA.first) : DateTime.fromMillisecondsSinceEpoch(0);
-      final dateB = listB.isNotEmpty ? _parseSnapshotDate(listB.first) : DateTime.fromMillisecondsSinceEpoch(0);
+      final dateA = listA.isNotEmpty
+          ? _parseSnapshotDate(listA.first)
+          : DateTime.fromMillisecondsSinceEpoch(0);
+      final dateB = listB.isNotEmpty
+          ? _parseSnapshotDate(listB.first)
+          : DateTime.fromMillisecondsSinceEpoch(0);
       return dateB.compareTo(dateA); // most recent first
     });
     return keys;
-  }
-
-  bool _isImageUrl(String value) {
-    final lower = value.toLowerCase().trim();
-    if (lower.contains('drive.google.com/uc') ||
-        lower.contains('drive.google.com/thumbnail') ||
-        lower.contains('drive.google.com/file/d/')) {
-      return true;
-    }
-    return lower.endsWith('.jpg') ||
-        lower.endsWith('.jpeg') ||
-        lower.endsWith('.png') ||
-        lower.endsWith('.webp') ||
-        lower.endsWith('.heic');
   }
 
   bool _isGoogleDriveFolderUrl(String value) {
@@ -194,10 +197,29 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     for (var item in list) {
       if (item == null) continue;
       if (item is Map) {
-        final path = (item['path'] ?? item['url'] ?? item['link'] ?? item['fileUrl'] ?? item['downloadUrl'] ?? '').toString().trim();
-        final comment = (item['comment'] ?? item['comentario'] ?? item['comentários'] ?? item['descricao'] ?? item['description'] ?? item['legenda'] ?? '').toString().trim();
+        final path =
+            (item['path'] ??
+                    item['url'] ??
+                    item['link'] ??
+                    item['fileUrl'] ??
+                    item['downloadUrl'] ??
+                    '')
+                .toString()
+                .trim();
+        final comment =
+            (item['comment'] ??
+                    item['comentario'] ??
+                    item['comentários'] ??
+                    item['descricao'] ??
+                    item['description'] ??
+                    item['legenda'] ??
+                    '')
+                .toString()
+                .trim();
         if (path.isNotEmpty) {
-          photos.add(PhotoItem(path: path, comment: comment.isNotEmpty ? comment : null));
+          photos.add(
+            PhotoItem(path: path, comment: comment.isNotEmpty ? comment : null),
+          );
         }
       } else if (item is String) {
         final trimmed = item.trim();
@@ -252,10 +274,6 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
         finalPath = _toDirectDriveDownloadUrl(driveId);
       }
 
-      if (trimmed.startsWith('http')) {
-        debugPrint('Candidato a imagem: $trimmed (isImageUrl: ${_isImageUrl(trimmed)})');
-      }
-
       photos.add(PhotoItem(path: finalPath));
     }
   }
@@ -306,36 +324,62 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     return photos;
   }
 
-  ReportModel _histToReport(Map<String, dynamic> h, {bool includeImages = false}) {
+  ReportModel _histToReport(
+    Map<String, dynamic> h, {
+    bool includeImages = false,
+  }) {
     DateTime visitDate = DateTime.now();
     try {
-      final dataVisita = ReportModel.asString(h['dataVisita'] ?? h['visitDate']);
+      final dataVisita = ReportModel.asString(
+        h['dataVisita'] ?? h['visitDate'],
+      );
       if (dataVisita.isNotEmpty) {
         visitDate = DateTime.parse(dataVisita).toLocal();
       }
     } catch (_) {}
 
-    final motivos = ReportModel.asStringList(h['motivos'] ?? h['subjects'] ?? h['Motivos / Assuntos']);
-    final tecnicos = ReportModel.asStringList(h['tecnicos'] ?? h['technicians'] ?? h['Técnicos Presentes'] ?? h['Tecnicos Presentes']);
-    final isTecnico = ReportModel.asString(h['tipo'] ?? h['tipo_relatorio']).toLowerCase().contains('tecnico');
+    final motivos = ReportModel.asStringList(
+      h['motivos'] ?? h['subjects'] ?? h['Motivos / Assuntos'],
+    );
+    final tecnicos = ReportModel.asStringList(
+      h['tecnicos'] ??
+          h['technicians'] ??
+          h['Técnicos Presentes'] ??
+          h['Tecnicos Presentes'],
+    );
+    final isTecnico = ReportModel.asString(
+      h['tipo'] ?? h['tipo_relatorio'],
+    ).toLowerCase().contains('tecnico');
 
     return ReportModel(
       id: ReportModel.asString(h['id'] ?? h['ID do Relatório']),
       reportNumber: _safeReportNumber(h),
       isTechnicalAnalysis: isTecnico,
-      creator: ReportModel.asString(h['usuario'] ?? h['creator'] ?? h['usuario_logado']),
+      creator: ReportModel.asString(
+        h['usuario'] ?? h['creator'] ?? h['usuario_logado'],
+      ),
       schoolName: ReportModel.asString(h['escola'] ?? h['schoolName']),
-      schoolAddress: ReportModel.asNullableString(h['endereco'] ?? h['schoolAddress'] ?? h['endereco_escola']),
+      schoolAddress: ReportModel.asNullableString(
+        h['endereco'] ?? h['schoolAddress'] ?? h['endereco_escola'],
+      ),
       visitDate: visitDate,
       subjects: motivos,
-      observations: ReportModel.asNullableString(h['observacoes'] ?? h['observations'] ?? h['Observações']),
+      observations: ReportModel.asNullableString(
+        h['observacoes'] ?? h['observations'] ?? h['Observações'],
+      ),
       tiMaterials: ReportModel.parseTiMaterialsFromJson(h),
       gre: ReportModel.asNullableString(h['gre']),
       technicians: tecnicos,
-      responsiblePerson: ReportModel.asNullableString(h['responsavel'] ?? h['responsiblePerson'] ?? h['Responsável da Escola']),
+      responsiblePerson: ReportModel.asNullableString(
+        h['responsavel'] ??
+            h['responsiblePerson'] ??
+            h['Responsável da Escola'],
+      ),
       photos: includeImages ? ReportModel.parsePhotosFromJson(h) : const [],
       signatureBytes: null,
-      signatureUrl: ReportModel.asNullableString(h['urlAssinatura'] ?? h['signatureUrl'] ?? h['Link Assinatura']),
+      signatureUrl: ReportModel.asNullableString(
+        h['urlAssinatura'] ?? h['signatureUrl'] ?? h['Link Assinatura'],
+      ),
     );
   }
 
@@ -380,7 +424,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
       if (mounted && includeImages && failedPhotos) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Não foi possível carregar algumas fotos. O PDF foi gerado com as imagens disponíveis.'),
+            content: Text(
+              'Não foi possível carregar algumas fotos. O PDF foi gerado com as imagens disponíveis.',
+            ),
           ),
         );
       }
@@ -388,9 +434,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
       debugPrint('Erro ao exportar PDF do histórico: $e');
       debugPrintStack(stackTrace: stack);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao gerar PDF: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erro ao gerar PDF: $e')));
       }
     } finally {
       if (mounted) {
@@ -407,7 +453,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
 
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) {
         return SafeArea(
           child: Padding(
@@ -415,17 +463,28 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Exportar relatório', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Exportar relatório',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 8),
-                const Text('Escolha como deseja gerar o PDF deste registro.', textAlign: TextAlign.center),
+                const Text(
+                  'Escolha como deseja gerar o PDF deste registro.',
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 24),
                 if (!hasPhotos && !isFolderOnly) ...[
-                  const Text('Sem fotos disponíveis neste registro.', style: TextStyle(fontStyle: FontStyle.italic)),
+                  const Text(
+                    'Sem fotos disponíveis neste registro.',
+                    style: TextStyle(fontStyle: FontStyle.italic),
+                  ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     icon: const Icon(Icons.picture_as_pdf),
                     label: const Text('Exportar sem fotos'),
-                    style: FilledButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
                     onPressed: () {
                       Navigator.pop(context);
                       _exportPdfFromHistory(h, includeImages: false);
@@ -437,7 +496,10 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                     child: Text(
                       'Este histórico possui um link de pasta de fotos, mas não contém URLs individuais das imagens. '
                       'Para inserir fotos no PDF, o histórico precisa salvar cada foto individualmente.',
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 13,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -445,7 +507,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                   OutlinedButton.icon(
                     icon: const Icon(Icons.photo_library_outlined),
                     label: const Text('Ver Fotos'),
-                    style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
                     onPressed: () {
                       Navigator.pop(context);
                       _openUrl(urlFotos);
@@ -455,7 +519,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                   FilledButton.icon(
                     icon: const Icon(Icons.picture_as_pdf),
                     label: const Text('Exportar sem fotos'),
-                    style: FilledButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
                     onPressed: () {
                       Navigator.pop(context);
                       _exportPdfFromHistory(h, includeImages: false);
@@ -464,13 +530,18 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                 ] else ...[
                   Text(
                     '${photos.length} foto(s) disponível(is) neste registro.',
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.picture_as_pdf),
                     label: const Text('Exportar sem fotos'),
-                    style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
                     onPressed: () {
                       Navigator.pop(context);
                       _exportPdfFromHistory(h, includeImages: false);
@@ -480,7 +551,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                   FilledButton.icon(
                     icon: const Icon(Icons.photo_library),
                     label: const Text('Exportar com fotos'),
-                    style: FilledButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
                     onPressed: () {
                       Navigator.pop(context);
                       _exportPdfFromHistory(h, includeImages: true);
@@ -496,7 +569,7 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
             ),
           ),
         );
-      }
+      },
     );
   }
 
@@ -530,7 +603,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
           elevation: 0,
           color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
           margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -556,31 +631,46 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Icon(Icons.info_outline_rounded, size: 14, color: colorScheme.onSurfaceVariant),
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: 14,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                       const SizedBox(width: 6),
-                      Builder(builder: (context) {
-                        // Quando está vendo versões de um número: conta versões filtradas
-                        // Quando está na lista de grupos: conta grupos, não registros individuais
-                        final String infoText;
-                        if (_selectedReportNumber != null) {
-                          final grouped = _groupHistoryByReportNumber(_filtered);
-                          final versions = grouped[_selectedReportNumber] ?? [];
-                          final n = versions.length;
-                          infoText = _searchQuery.isNotEmpty
-                              ? '$n versão${n != 1 ? 'ões' : ''} para "$_searchQuery"'
-                              : '$n versão${n != 1 ? 'ões' : ''} deste relatório';
-                        } else {
-                          final grouped = _groupHistoryByReportNumber(_filtered);
-                          final n = grouped.length;
-                          infoText = _searchQuery.isNotEmpty
-                              ? '$n relatório${n != 1 ? 's' : ''} para "$_searchQuery"'
-                              : '$n relatório${n != 1 ? 's' : ''} no histórico';
-                        }
-                        return Text(
-                          infoText,
-                          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500),
-                        );
-                      }),
+                      Builder(
+                        builder: (context) {
+                          // Quando está vendo versões de um número: conta versões filtradas
+                          // Quando está na lista de grupos: conta grupos, não registros individuais
+                          final String infoText;
+                          if (_selectedReportNumber != null) {
+                            final grouped = _groupHistoryByReportNumber(
+                              _filtered,
+                            );
+                            final versions =
+                                grouped[_selectedReportNumber] ?? [];
+                            final n = versions.length;
+                            infoText = _searchQuery.isNotEmpty
+                                ? '$n versão${n != 1 ? 'ões' : ''} para "$_searchQuery"'
+                                : '$n versão${n != 1 ? 'ões' : ''} deste relatório';
+                          } else {
+                            final grouped = _groupHistoryByReportNumber(
+                              _filtered,
+                            );
+                            final n = grouped.length;
+                            infoText = _searchQuery.isNotEmpty
+                                ? '$n relatório${n != 1 ? 's' : ''} para "$_searchQuery"'
+                                : '$n relatório${n != 1 ? 's' : ''} no histórico';
+                          }
+                          return Text(
+                            infoText,
+                            style: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ],
@@ -612,8 +702,12 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
   Widget _buildEmptyState() {
     final hasQuery = _searchQuery.isNotEmpty;
     return EmptyState(
-      icon: hasQuery ? Icons.search_off_rounded : Icons.history_toggle_off_rounded,
-      title: hasQuery ? 'Nenhum resultado encontrado' : 'Nenhum histórico encontrado',
+      icon: hasQuery
+          ? Icons.search_off_rounded
+          : Icons.history_toggle_off_rounded,
+      title: hasQuery
+          ? 'Nenhum resultado encontrado'
+          : 'Nenhum histórico encontrado',
       message: hasQuery
           ? 'Nenhum registro corresponde a "$_searchQuery".\nTente outros termos.'
           : 'As versões editadas dos relatórios aparecerão aqui.',
@@ -623,16 +717,19 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     );
   }
 
-  Widget _buildGroupCard(String reportNumber, List<Map<String, dynamic>> versions) {
+  Widget _buildGroupCard(
+    String reportNumber,
+    List<Map<String, dynamic>> versions,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
     final latest = versions.first; // já ordenado: mais recente primeiro
     // Busca escola e editor da versão mais recente que tenha o campo preenchido
     final escola = versions
-            .map((v) => v['escola']?.toString().trim() ?? '')
-            .firstWhere((s) => s.isNotEmpty, orElse: () => 'Escola não informada');
+        .map((v) => v['escola']?.toString().trim() ?? '')
+        .firstWhere((s) => s.isNotEmpty, orElse: () => 'Escola não informada');
     final editadoPor = versions
-            .map((v) => (v['editadoPor'] ?? v['usuario'] ?? '').toString().trim())
-            .firstWhere((s) => s.isNotEmpty, orElse: () => 'Não informado');
+        .map((v) => (v['editadoPor'] ?? v['usuario'] ?? '').toString().trim())
+        .firstWhere((s) => s.isNotEmpty, orElse: () => 'Não informado');
     final dataSnap = _fmt(latest['dataSnapshot']);
 
     return Card(
@@ -641,7 +738,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -663,7 +762,11 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                   color: colorScheme.primaryContainer.withValues(alpha: 0.62),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(Icons.history_edu_rounded, color: colorScheme.primary, size: 22),
+                child: Icon(
+                  Icons.history_edu_rounded,
+                  color: colorScheme.primary,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -684,7 +787,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                           ),
                         ),
                         _buildChip(
-                          versions.length == 1 ? '1 versão' : '${versions.length} versões',
+                          versions.length == 1
+                              ? '1 versão'
+                              : '${versions.length} versões',
                           colorScheme.primaryContainer,
                           colorScheme.onPrimaryContainer,
                         ),
@@ -707,7 +812,10 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                       spacing: 10,
                       runSpacing: 6,
                       children: [
-                        _buildMetaText(Icons.person_outline_rounded, editadoPor),
+                        _buildMetaText(
+                          Icons.person_outline_rounded,
+                          editadoPor,
+                        ),
                         _buildMetaText(Icons.access_time_rounded, dataSnap),
                       ],
                     ),
@@ -715,7 +823,10 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(Icons.chevron_right_rounded, color: colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: colorScheme.onSurfaceVariant,
+              ),
             ],
           ),
         ),
@@ -749,9 +860,16 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     final dataSnap = _fmt(h['dataSnapshot']);
     final tipo = (h['tipo'] ?? h['tipo_relatorio'] ?? '').toString();
     final dataVisita = _fmtDate(h['dataVisita']);
-    final motivos = JsonUtils.asString(h['motivos'] ?? h['subjects'] ?? h['Motivos / Assuntos']);
+    final motivos = JsonUtils.asString(
+      h['motivos'] ?? h['subjects'] ?? h['Motivos / Assuntos'],
+    );
     final escola = JsonUtils.asString(h['escola'] ?? h['schoolName']);
-    final tecnicos = JsonUtils.asString(h['tecnicos'] ?? h['technicians'] ?? h['Técnicos Presentes'] ?? h['Tecnicos Presentes']);
+    final tecnicos = JsonUtils.asString(
+      h['tecnicos'] ??
+          h['technicians'] ??
+          h['Técnicos Presentes'] ??
+          h['Tecnicos Presentes'],
+    );
 
     return Card(
       elevation: 0,
@@ -803,10 +921,12 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                         if (tipo.isNotEmpty)
                           _buildChip(
                             tipo,
-                            tipo.toLowerCase().contains('tecnico') || tipo.toLowerCase().contains('técnico')
+                            tipo.toLowerCase().contains('tecnico') ||
+                                    tipo.toLowerCase().contains('técnico')
                                 ? colorScheme.secondaryContainer
                                 : colorScheme.tertiaryContainer,
-                            tipo.toLowerCase().contains('tecnico') || tipo.toLowerCase().contains('técnico')
+                            tipo.toLowerCase().contains('tecnico') ||
+                                    tipo.toLowerCase().contains('técnico')
                                 ? colorScheme.onSecondaryContainer
                                 : colorScheme.onTertiaryContainer,
                           ),
@@ -823,13 +943,20 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
               ),
               const SizedBox(height: 8),
               if (escola.isNotEmpty)
-                _buildInlineInfo(Icons.school_outlined, escola, highlight: true),
+                _buildInlineInfo(
+                  Icons.school_outlined,
+                  escola,
+                  highlight: true,
+                ),
               Wrap(
                 spacing: 12,
                 runSpacing: 8,
                 children: [
                   _buildMetaText(Icons.event_rounded, 'Visita: $dataVisita'),
-                  _buildMetaText(Icons.access_time_rounded, 'Alterado: $dataSnap'),
+                  _buildMetaText(
+                    Icons.access_time_rounded,
+                    'Alterado: $dataSnap',
+                  ),
                   _buildMetaText(Icons.edit_outlined, 'Por: $editadoPor'),
                 ],
               ),
@@ -848,7 +975,11 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     );
   }
 
-  Widget _buildInlineInfo(IconData icon, String text, {bool highlight = false}) {
+  Widget _buildInlineInfo(
+    IconData icon,
+    String text, {
+    bool highlight = false,
+  }) {
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
@@ -858,7 +989,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
           Icon(
             icon,
             size: 15,
-            color: highlight ? colorScheme.primary : colorScheme.onSurfaceVariant,
+            color: highlight
+                ? colorScheme.primary
+                : colorScheme.onSurfaceVariant,
           ),
           const SizedBox(width: 7),
           Expanded(
@@ -866,7 +999,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
               text,
               style: TextStyle(
                 fontSize: highlight ? 13 : 12,
-                color: highlight ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
+                color: highlight
+                    ? colorScheme.onSurface
+                    : colorScheme.onSurfaceVariant,
                 fontWeight: highlight ? FontWeight.w700 : FontWeight.normal,
                 height: 1.25,
               ),
@@ -880,16 +1015,12 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
   }
 
   Widget _buildChip(String label, Color bg, Color fg) {
-    return InfoChip(
-      label: label,
-      backgroundColor: bg,
-      color: fg,
-    );
+    return InfoChip(label: label, backgroundColor: bg, color: fg);
   }
 
   Widget _buildHistoryList() {
     final grouped = _groupHistoryByReportNumber(_filtered);
-    
+
     grouped.forEach((key, list) {
       list.sort((a, b) {
         final dateA = _parseSnapshotDate(a);
@@ -905,7 +1036,8 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
         return EmptyState(
           icon: Icons.search_off_rounded,
           title: 'Nenhuma versão encontrada',
-          message: 'Nenhuma versão de "$_selectedReportNumber" corresponde a "$_searchQuery".\nLimpe a busca para ver todas as versões.',
+          message:
+              'Nenhuma versão de "$_selectedReportNumber" corresponde a "$_searchQuery".\nLimpe a busca para ver todas as versões.',
           actionLabel: 'Limpar busca',
           onAction: () {
             _searchController.clear();
@@ -925,10 +1057,8 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
               itemCount: versions.length,
-              itemBuilder: (ctx, i) => _buildVersionCard(
-                versions[i],
-                isLatest: i == 0,
-              ),
+              itemBuilder: (ctx, i) =>
+                  _buildVersionCard(versions[i], isLatest: i == 0),
             ),
           ),
         ),
@@ -955,7 +1085,12 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     );
   }
 
-  Widget _buildDetailRow(IconData icon, String label, String? value, {bool highlight = false}) {
+  Widget _buildDetailRow(
+    IconData icon,
+    String label,
+    String? value, {
+    bool highlight = false,
+  }) {
     if (value == null || value.isEmpty) return const SizedBox.shrink();
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
@@ -969,13 +1104,22 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500)),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   value,
                   style: TextStyle(
                     fontSize: 14,
-                    color: highlight ? colorScheme.primary : colorScheme.onSurface,
+                    color: highlight
+                        ? colorScheme.primary
+                        : colorScheme.onSurface,
                     fontWeight: highlight ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
@@ -998,7 +1142,15 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
             children: [
               Icon(icon, size: 16, color: colorScheme.primary),
               const SizedBox(width: 8),
-              Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.primary, letterSpacing: 0.5)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: colorScheme.primary,
+                  letterSpacing: 0.5,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -1006,9 +1158,13 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+              color: colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.35,
+              ),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+              border: Border.all(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+              ),
             ),
             child: child,
           ),
@@ -1022,9 +1178,15 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
     final versao = h['versao'] ?? '';
     final numRel = _safeReportNumber(h);
     final escola = JsonUtils.asNullableString(h['escola']) ?? '—';
-    final hasSignature = JsonUtils.asString(h['urlAssinatura'] ?? h['signatureUrl'] ?? h['Link Assinatura']).isNotEmpty;
-    final hasPhotos = JsonUtils.asString(h['urlFotos'] ?? h['photos'] ?? h['url_fotos'] ?? h['Link Foto']).isNotEmpty;
-    final hasObservations = JsonUtils.asString(h['observacoes'] ?? h['observations'] ?? h['Observações']).isNotEmpty;
+    final hasSignature = JsonUtils.asString(
+      h['urlAssinatura'] ?? h['signatureUrl'] ?? h['Link Assinatura'],
+    ).isNotEmpty;
+    final hasPhotos = JsonUtils.asString(
+      h['urlFotos'] ?? h['photos'] ?? h['url_fotos'] ?? h['Link Foto'],
+    ).isNotEmpty;
+    final hasObservations = JsonUtils.asString(
+      h['observacoes'] ?? h['observations'] ?? h['Observações'],
+    ).isNotEmpty;
 
     showModalBottomSheet(
       context: context,
@@ -1067,7 +1229,11 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                       color: colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(Icons.history_edu_rounded, color: colorScheme.onPrimaryContainer, size: 24),
+                    child: Icon(
+                      Icons.history_edu_rounded,
+                      color: colorScheme.onPrimaryContainer,
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -1078,7 +1244,11 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                           children: [
                             Text(
                               numRel,
-                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onSurface,
+                              ),
                             ),
                             const SizedBox(width: 10),
                             _buildChip(
@@ -1093,7 +1263,10 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                         const SizedBox(height: 4),
                         Text(
                           escola,
-                          style: TextStyle(fontSize: 14, color: colorScheme.onSurfaceVariant),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1106,92 +1279,195 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.schedule_rounded, size: 13, color: colorScheme.onSurfaceVariant),
+                  Icon(
+                    Icons.schedule_rounded,
+                    size: 13,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 5),
                   Text(
                     'Snapshot: ${_fmt(JsonUtils.asNullableString(h['dataSnapshot'] ?? h['updatedAt'] ?? h['dataVisita']))}',
-                    style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
 
-              Divider(height: 32, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+              Divider(
+                height: 32,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
 
               // Section: Escola
-              _buildDetailSection('Dados da Escola', Icons.school_outlined, Column(
-                children: [
-                  _buildDetailRow(Icons.school_rounded, 'Escola', JsonUtils.asNullableString(h['escola'])),
-                  _buildDetailRow(Icons.map_outlined, 'Regional (GRE)', JsonUtils.asNullableString(h['gre'])),
-                  _buildDetailRow(Icons.location_on_outlined, 'Endereço', JsonUtils.asNullableString(h['endereco'])),
-                ],
-              )),
+              _buildDetailSection(
+                'Dados da Escola',
+                Icons.school_outlined,
+                Column(
+                  children: [
+                    _buildDetailRow(
+                      Icons.school_rounded,
+                      'Escola',
+                      JsonUtils.asNullableString(h['escola']),
+                    ),
+                    _buildDetailRow(
+                      Icons.map_outlined,
+                      'Regional (GRE)',
+                      JsonUtils.asNullableString(h['gre']),
+                    ),
+                    _buildDetailRow(
+                      Icons.location_on_outlined,
+                      'Endereço',
+                      JsonUtils.asNullableString(h['endereco']),
+                    ),
+                  ],
+                ),
+              ),
 
               // Section: Visita
-              _buildDetailSection('Dados da Visita', Icons.event_note_outlined, Column(
-                children: [
-                  _buildDetailRow(Icons.calendar_today_rounded, 'Data da Visita', _fmtDate(JsonUtils.asNullableString(h['dataVisita']))),
-                  _buildDetailRow(Icons.category_outlined, 'Tipo', JsonUtils.asNullableString(h['tipo'])),
-                  _buildDetailRow(Icons.list_alt_rounded, 'Motivos', JsonUtils.asNullableString(h['motivos'])),
-                  _buildDetailRow(Icons.engineering_outlined, 'Técnicos', JsonUtils.asNullableString(h['tecnicos'])),
-                  _buildDetailRow(Icons.person_outline, 'Responsável', JsonUtils.asNullableString(h['responsavel'])),
-                ],
-              )),
+              _buildDetailSection(
+                'Dados da Visita',
+                Icons.event_note_outlined,
+                Column(
+                  children: [
+                    _buildDetailRow(
+                      Icons.calendar_today_rounded,
+                      'Data da Visita',
+                      _fmtDate(JsonUtils.asNullableString(h['dataVisita'])),
+                    ),
+                    _buildDetailRow(
+                      Icons.category_outlined,
+                      'Tipo',
+                      JsonUtils.asNullableString(h['tipo']),
+                    ),
+                    _buildDetailRow(
+                      Icons.list_alt_rounded,
+                      'Motivos',
+                      JsonUtils.asNullableString(h['motivos']),
+                    ),
+                    _buildDetailRow(
+                      Icons.engineering_outlined,
+                      'Técnicos',
+                      JsonUtils.asNullableString(h['tecnicos']),
+                    ),
+                    _buildDetailRow(
+                      Icons.person_outline,
+                      'Responsável',
+                      JsonUtils.asNullableString(h['responsavel']),
+                    ),
+                  ],
+                ),
+              ),
 
               // Section: Alteração
-              _buildDetailSection('Registro de Alteração', Icons.edit_note_rounded, Column(
-                children: [
-                  _buildDetailRow(Icons.person_rounded, 'Usuário Criador', JsonUtils.asNullableString(h['usuario']), highlight: true),
-                  _buildDetailRow(Icons.edit_rounded, 'Editado Por', JsonUtils.asNullableString(h['editadoPor']), highlight: true),
-                ],
-              )),
+              _buildDetailSection(
+                'Registro de Alteração',
+                Icons.edit_note_rounded,
+                Column(
+                  children: [
+                    _buildDetailRow(
+                      Icons.person_rounded,
+                      'Usuário Criador',
+                      JsonUtils.asNullableString(h['usuario']),
+                      highlight: true,
+                    ),
+                    _buildDetailRow(
+                      Icons.edit_rounded,
+                      'Editado Por',
+                      JsonUtils.asNullableString(h['editadoPor']),
+                      highlight: true,
+                    ),
+                  ],
+                ),
+              ),
 
               // Section: Observações
               if (hasObservations)
-                _buildDetailSection('Observações / Diagnóstico', Icons.notes_rounded, Text(
-                  JsonUtils.asString(h['observacoes'] ?? h['observations'] ?? h['Observações']),
-                  style: TextStyle(fontSize: 14, color: colorScheme.onSurface, height: 1.5),
-                )),
+                _buildDetailSection(
+                  'Observações / Diagnóstico',
+                  Icons.notes_rounded,
+                  Text(
+                    JsonUtils.asString(
+                      h['observacoes'] ?? h['observations'] ?? h['Observações'],
+                    ),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: colorScheme.onSurface,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
 
               // Section: Ações
-              _buildDetailSection('Anexos e Exportação', Icons.attach_file_rounded, Column(
-                children: [
-                  if (hasSignature) ...[
-                    _buildActionButton(
-                      label: 'Ver Assinatura',
-                      icon: Icons.draw_outlined,
-                      onTap: () => _openUrl(JsonUtils.asString(h['urlAssinatura'] ?? h['signatureUrl'] ?? h['Link Assinatura'])),
-                      outlined: true,
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                  if (hasPhotos) ...[
-                    _buildActionButton(
-                      label: 'Ver Fotos',
-                      icon: Icons.photo_library_outlined,
-                      onTap: () => _openUrl(JsonUtils.asString(h['urlFotos'] ?? h['photos'] ?? h['url_fotos'] ?? h['Link Foto'])),
-                      outlined: true,
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                  if (!hasSignature && !hasPhotos)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          Icon(Icons.image_not_supported_outlined, size: 14, color: colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 8),
-                          Text('Nenhum anexo disponível', style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13)),
-                        ],
+              _buildDetailSection(
+                'Anexos e Exportação',
+                Icons.attach_file_rounded,
+                Column(
+                  children: [
+                    if (hasSignature) ...[
+                      _buildActionButton(
+                        label: 'Ver Assinatura',
+                        icon: Icons.draw_outlined,
+                        onTap: () => _openUrl(
+                          JsonUtils.asString(
+                            h['urlAssinatura'] ??
+                                h['signatureUrl'] ??
+                                h['Link Assinatura'],
+                          ),
+                        ),
+                        outlined: true,
                       ),
+                      const SizedBox(height: 10),
+                    ],
+                    if (hasPhotos) ...[
+                      _buildActionButton(
+                        label: 'Ver Fotos',
+                        icon: Icons.photo_library_outlined,
+                        onTap: () => _openUrl(
+                          JsonUtils.asString(
+                            h['urlFotos'] ??
+                                h['photos'] ??
+                                h['url_fotos'] ??
+                                h['Link Foto'],
+                          ),
+                        ),
+                        outlined: true,
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    if (!hasSignature && !hasPhotos)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.image_not_supported_outlined,
+                              size: 14,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Nenhum anexo disponível',
+                              style: TextStyle(
+                                color: colorScheme.onSurfaceVariant,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    _buildActionButton(
+                      label: 'Imprimir / Exportar PDF',
+                      icon: Icons.picture_as_pdf_rounded,
+                      onTap: _isExportingPdf
+                          ? () {}
+                          : () => _showExportOptions(h),
+                      outlined: false,
                     ),
-                  _buildActionButton(
-                    label: 'Imprimir / Exportar PDF',
-                    icon: Icons.picture_as_pdf_rounded,
-                    onTap: _isExportingPdf ? () {} : () => _showExportOptions(h),
-                    outlined: false,
-                  ),
-                ],
-              )),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -1213,7 +1489,9 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
         label: Text(label),
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(double.infinity, 48),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       );
     }
@@ -1268,7 +1546,10 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
                 _selectedReportNumber != null
                     ? 'Exibindo snapshots de $_selectedReportNumber'
                     : 'Auditoria de modificações e exclusões',
-                style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -1287,8 +1568,8 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
               child: _isLoading
                   ? _buildLoadingState()
                   : _filtered.isEmpty
-                      ? _buildEmptyState()
-                      : _buildHistoryList(),
+                  ? _buildEmptyState()
+                  : _buildHistoryList(),
             ),
           ],
         ),

@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint, debugPrintStack;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, debugPrint, debugPrintStack;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/report_model.dart';
@@ -36,8 +37,9 @@ class PendingSyncItem {
 
 class GoogleSheetsService {
   // A URL do Apps Script gerada
-  static const String _scriptUrl = 'https://script.google.com/macros/s/AKfycbxw2FWbqnNvCdnMORY4BMg44mfplFi8YQ838GNhKFQUBMfsI3HMyISq742LxKoWqqp5/exec';
-  
+  static const String _scriptUrl =
+      'https://script.google.com/macros/s/AKfycbxw2FWbqnNvCdnMORY4BMg44mfplFi8YQ838GNhKFQUBMfsI3HMyISq742LxKoWqqp5/exec';
+
   // Chave para salvar os dados offline no SharedPreferences
   static const String _offlineQueueKey = 'offline_reports_queue';
   static const String _localReportsKey = 'local_reports';
@@ -89,10 +91,16 @@ class GoogleSheetsService {
 
   /// Envia o relatório. Se estiver offline, salva na fila para sincronizar depois.
   /// [isEdit] indica se é uma edição (true) ou criação nova (false).
-  Future<void> sendReport(ReportModel report, String loggedInUser, {bool isEdit = false}) async {
+  Future<void> sendReport(
+    ReportModel report,
+    String loggedInUser, {
+    bool isEdit = false,
+  }) async {
     // Resolve o município mesmo que schoolCity esteja vazio
     final municipio = await _resolveReportMunicipio(report);
-    final materiaisTiJson = jsonEncode(report.tiMaterials.map((item) => item.toJson()).toList());
+    final materiaisTiJson = jsonEncode(
+      report.tiMaterials.map((item) => item.toJson()).toList(),
+    );
 
     // Monta o pacote de dados JSON
     final Map<String, dynamic> data = {
@@ -160,7 +168,10 @@ class GoogleSheetsService {
     data['fotosArray'] = fotosBase64Array;
     if (remotePhotos.isNotEmpty) {
       data['fotosJsonExistente'] = remotePhotos;
-      data['urlFotosExistente'] = remotePhotos.map((photo) => photo['url']).whereType<String>().join(', ');
+      data['urlFotosExistente'] = remotePhotos
+          .map((photo) => photo['url'])
+          .whereType<String>()
+          .join(', ');
     }
     if (report.signatureUrl != null && report.signatureUrl!.trim().isNotEmpty) {
       data['urlAssinaturaExistente'] = report.signatureUrl!.trim();
@@ -176,7 +187,8 @@ class GoogleSheetsService {
       if (response.statusCode == 200 || response.statusCode == 302) {
         final decoded = _parseAndValidateResponse(response);
         if (!_isSuccess(decoded)) {
-          final errMsg = decoded['message'] ?? 'Erro desconhecido no Apps Script';
+          final errMsg =
+              decoded['message'] ?? 'Erro desconhecido no Apps Script';
           throw Exception(errMsg);
         }
       } else {
@@ -186,10 +198,14 @@ class GoogleSheetsService {
       // Se cair aqui, é porque falhou (Sem internet, timeout, etc)
       debugPrint('Falha ao enviar relatório, mantendo offline: $e');
       await _saveOffline(data);
-      
+
       final errStr = e.toString();
-      if (errStr.contains('HTML') || errStr.contains('decodificada') || errStr.contains('JSON')) {
-        throw Exception('Falha ao enviar relatório. A API retornou resposta inválida. Verifique a implantação do Apps Script.');
+      if (errStr.contains('HTML') ||
+          errStr.contains('decodificada') ||
+          errStr.contains('JSON')) {
+        throw Exception(
+          'Falha ao enviar relatório. A API retornou resposta inválida. Verifique a implantação do Apps Script.',
+        );
       }
       rethrow; // Propaga para a UI tratar e exibir o SnackBar se necessário
     }
@@ -197,7 +213,11 @@ class GoogleSheetsService {
 
   /// Remove um relatório da planilha do Google Sheets.
   /// Apenas ADM pode chamar esta função (controle feito na UI do Flutter).
-  Future<void> deleteReport(String reportId, String loggedInUser, ReportModel report) async {
+  Future<void> deleteReport(
+    String reportId,
+    String loggedInUser,
+    ReportModel report,
+  ) async {
     final Map<String, dynamic> data = {
       'acao': 'deletar_relatorio',
       'id': reportId,
@@ -215,14 +235,19 @@ class GoogleSheetsService {
         if (_isSuccess(decoded)) {
           debugPrint('Relatório $reportId excluído da nuvem com sucesso!');
         } else {
-          final errMsg = decoded['message'] ?? 'Erro desconhecido no Apps Script';
+          final errMsg =
+              decoded['message'] ?? 'Erro desconhecido no Apps Script';
           throw Exception(errMsg);
         }
       } else {
-        throw Exception('Erro ao excluir da nuvem: status ${response.statusCode}');
+        throw Exception(
+          'Erro ao excluir da nuvem: status ${response.statusCode}',
+        );
       }
     } catch (e) {
-      debugPrint('Erro ao excluir relatório da nuvem. Salvando ação offline. Erro: $e');
+      debugPrint(
+        'Erro ao excluir relatório da nuvem. Salvando ação offline. Erro: $e',
+      );
       await _saveOffline(data);
     }
   }
@@ -237,14 +262,18 @@ class GoogleSheetsService {
       request.followRedirects = false;
 
       var client = http.Client();
-      var streamedResponse = await client.send(request).timeout(const Duration(seconds: 40));
+      var streamedResponse = await client
+          .send(request)
+          .timeout(const Duration(seconds: 40));
       var response = await http.Response.fromStream(streamedResponse);
 
       http.Response finalResponse = response;
       if (response.statusCode == 302 || response.statusCode == 303) {
         final location = response.headers['location'];
         if (location != null) {
-          finalResponse = await http.get(Uri.parse(location)).timeout(const Duration(seconds: 40));
+          finalResponse = await http
+              .get(Uri.parse(location))
+              .timeout(const Duration(seconds: 40));
         }
       }
 
@@ -264,31 +293,59 @@ class GoogleSheetsService {
                 });
 
                 // Normalizar fotos/técnicos/motivos usando JsonUtils e sem cast direto
-                safeMap['motivos'] = JsonUtils.asString(safeMap['motivos'] ?? safeMap['subjects'] ?? safeMap['Motivos / Assuntos']);
-                safeMap['tecnicos'] = JsonUtils.asString(safeMap['tecnicos'] ?? safeMap['technicians'] ?? safeMap['Técnicos Presentes'] ?? safeMap['Tecnicos Presentes']);
-                
+                safeMap['motivos'] = JsonUtils.asString(
+                  safeMap['motivos'] ??
+                      safeMap['subjects'] ??
+                      safeMap['Motivos / Assuntos'],
+                );
+                safeMap['tecnicos'] = JsonUtils.asString(
+                  safeMap['tecnicos'] ??
+                      safeMap['technicians'] ??
+                      safeMap['Técnicos Presentes'] ??
+                      safeMap['Tecnicos Presentes'],
+                );
+
                 // Normalização para fotos/assinaturas
-                safeMap['fotosJson'] = JsonUtils.asNullableString(safeMap['fotosJson'] ?? safeMap['fotos_json']);
-                safeMap['urlFotos'] = JsonUtils.asNullableString(safeMap['urlFotos'] ?? safeMap['photos'] ?? safeMap['url_fotos'] ?? safeMap['Link Foto']);
-                safeMap['urlAssinatura'] = JsonUtils.asNullableString(safeMap['urlAssinatura'] ?? safeMap['signatureUrl'] ?? safeMap['Link Assinatura']);
-                safeMap['materiais_ti_json'] = JsonUtils.asNullableString(safeMap['materiais_ti_json'] ?? safeMap['tiMaterials']);
+                safeMap['fotosJson'] = JsonUtils.asNullableString(
+                  safeMap['fotosJson'] ?? safeMap['fotos_json'],
+                );
+                safeMap['urlFotos'] = JsonUtils.asNullableString(
+                  safeMap['urlFotos'] ??
+                      safeMap['photos'] ??
+                      safeMap['url_fotos'] ??
+                      safeMap['Link Foto'],
+                );
+                safeMap['urlAssinatura'] = JsonUtils.asNullableString(
+                  safeMap['urlAssinatura'] ??
+                      safeMap['signatureUrl'] ??
+                      safeMap['Link Assinatura'],
+                );
+                safeMap['materiais_ti_json'] = JsonUtils.asNullableString(
+                  safeMap['materiais_ti_json'] ?? safeMap['tiMaterials'],
+                );
 
                 history.add(safeMap);
               }
             }
           }
-          debugPrint('Histórico recebido e convertido com segurança: ${history.length}');
+          debugPrint(
+            'Histórico recebido e convertido com segurança: ${history.length}',
+          );
           return history;
         }
-        throw Exception(decoded['message']?.toString() ?? 'Erro desconhecido ao buscar histórico');
+        throw Exception(
+          decoded['message']?.toString() ??
+              'Erro desconhecido ao buscar histórico',
+        );
       }
-      throw Exception('Erro HTTP ${finalResponse.statusCode} ao buscar histórico');
+      throw Exception(
+        'Erro HTTP ${finalResponse.statusCode} ao buscar histórico',
+      );
     } catch (e) {
       debugPrint('Erro ao buscar histórico: $e');
       rethrow;
     }
   }
-
 
   /// Salva ou atualiza os dados na memória do celular quando está offline,
   /// aplicando regras de deduplicação e normalização inteligentes.
@@ -296,15 +353,20 @@ class GoogleSheetsService {
     final List<Map<String, dynamic>> parsedQueue = await _getOfflineQueue();
     final pendingData = Map<String, dynamic>.from(data);
     pendingData['_pendingCreatedAt'] ??= DateTime.now().toIso8601String();
-    
+
     final String targetId = pendingData['id']?.toString() ?? '';
     if (targetId.isEmpty) {
-      debugPrint('Tentativa de salvar operação offline sem ID válido. Ignorado.');
+      debugPrint(
+        'Tentativa de salvar operação offline sem ID válido. Ignorado.',
+      );
       return;
     }
 
-    final String targetAction = pendingData['acao']?.toString() ?? ''; // 'adicionar' ou 'deletar_relatorio'
-    final String targetActionType = pendingData['acao_tipo']?.toString() ?? ''; // 'Criar' ou 'Editar'
+    final String targetAction =
+        pendingData['acao']?.toString() ??
+        ''; // 'adicionar' ou 'deletar_relatorio'
+    final String targetActionType =
+        pendingData['acao_tipo']?.toString() ?? ''; // 'Criar' ou 'Editar'
 
     bool handled = false;
 
@@ -314,21 +376,26 @@ class GoogleSheetsService {
       //   o relatório nunca foi para a nuvem. Então a gente simplesmente remove a criação
       //   e ignora a deleção (não manda nada para a fila).
       // - Se existia uma edição pendente, removemos a edição e colocamos apenas a deleção.
-      final hasPendingCreate = parsedQueue.any((item) => 
-        item['id']?.toString() == targetId && 
-        item['acao'] == 'adicionar' && 
-        item['acao_tipo'] == 'Criar'
+      final hasPendingCreate = parsedQueue.any(
+        (item) =>
+            item['id']?.toString() == targetId &&
+            item['acao'] == 'adicionar' &&
+            item['acao_tipo'] == 'Criar',
       );
 
       if (hasPendingCreate) {
         parsedQueue.removeWhere((item) => item['id']?.toString() == targetId);
         handled = true;
-        debugPrint('Deduplicação offline: Relatório $targetId deletado localmente antes de subir. Fila limpa para este ID.');
+        debugPrint(
+          'Deduplicação offline: Relatório $targetId deletado localmente antes de subir. Fila limpa para este ID.',
+        );
       } else {
         parsedQueue.removeWhere((item) => item['id']?.toString() == targetId);
         parsedQueue.add(pendingData);
         handled = true;
-        debugPrint('Deduplicação offline: Relatório $targetId marcado para deleção na nuvem. Fila limpa de updates anteriores.');
+        debugPrint(
+          'Deduplicação offline: Relatório $targetId marcado para deleção na nuvem. Fila limpa de updates anteriores.',
+        );
       }
     } else if (targetAction == 'adicionar') {
       // Regra 2: Se for adicionar (Criar ou Editar):
@@ -338,12 +405,11 @@ class GoogleSheetsService {
       //   atualizamos o payload com os novos dados e mantemos como 'Editar'.
       for (int i = 0; i < parsedQueue.length; i++) {
         final item = parsedQueue[i];
-        if (item['id']?.toString() == targetId &&
-            item['acao'] == 'adicionar') {
+        if (item['id']?.toString() == targetId && item['acao'] == 'adicionar') {
           final String originalActionType =
               item['acao_tipo']?.toString() ?? 'Criar';
-          final originalPendingCreatedAt =
-              item['_pendingCreatedAt']?.toString();
+          final originalPendingCreatedAt = item['_pendingCreatedAt']
+              ?.toString();
           parsedQueue[i] = Map<String, dynamic>.from(pendingData);
           parsedQueue[i]['acao_tipo'] = originalActionType;
           if (originalPendingCreatedAt != null &&
@@ -351,7 +417,9 @@ class GoogleSheetsService {
             parsedQueue[i]['_pendingCreatedAt'] = originalPendingCreatedAt;
           }
           handled = true;
-          debugPrint('Deduplicação offline: Payload atualizado da operação "$originalActionType" pendente do relatório $targetId.');
+          debugPrint(
+            'Deduplicação offline: Payload atualizado da operação "$originalActionType" pendente do relatório $targetId.',
+          );
           break;
         }
       }
@@ -359,7 +427,9 @@ class GoogleSheetsService {
 
     if (!handled) {
       parsedQueue.add(pendingData);
-      debugPrint('Deduplicação offline: Nova operação "${targetAction == 'adicionar' ? targetActionType : 'Deletar'}" adicionada para o relatório $targetId.');
+      debugPrint(
+        'Deduplicação offline: Nova operação "${targetAction == 'adicionar' ? targetActionType : 'Deletar'}" adicionada para o relatório $targetId.',
+      );
     }
 
     await _saveOfflineQueue(parsedQueue);
@@ -371,7 +441,9 @@ class GoogleSheetsService {
             : 'pending_create',
       );
     }
-    debugPrint('Relatório salvo na fila offline. Total na fila: ${parsedQueue.length}');
+    debugPrint(
+      'Relatório salvo na fila offline. Total na fila: ${parsedQueue.length}',
+    );
   }
 
   /// Lê a fila offline de forma segura do SharedPreferences.
@@ -404,7 +476,9 @@ class GoogleSheetsService {
       return [];
     } catch (e, stack) {
       // Captura TypeError de cast (List<dynamic> as String?) e qualquer outro erro
-      debugPrint('Fila offline corrompida ou tipo incompatível ($_offlineQueueKey). Limpando. Erro: $e');
+      debugPrint(
+        'Fila offline corrompida ou tipo incompatível ($_offlineQueueKey). Limpando. Erro: $e',
+      );
       debugPrintStack(stackTrace: stack);
       try {
         await prefs.remove(_offlineQueueKey);
@@ -418,7 +492,8 @@ class GoogleSheetsService {
   /// formato atual (String JSON em _offlineQueueKey). Chamado apenas quando a
   /// chave principal está vazia.
   Future<List<Map<String, dynamic>>> _migrateLegacyQueue(
-      SharedPreferences prefs) async {
+    SharedPreferences prefs,
+  ) async {
     for (final key in _legacyOfflineQueueKeys) {
       if (!prefs.containsKey(key)) continue;
       try {
@@ -433,7 +508,9 @@ class GoogleSheetsService {
                 .toList();
             await prefs.remove(key);
             if (queue.isNotEmpty) await _saveOfflineQueue(queue);
-            debugPrint('Migrado ${queue.length} item(s) da chave legada "$key".');
+            debugPrint(
+              'Migrado ${queue.length} item(s) da chave legada "$key".',
+            );
             return queue;
           }
         }
@@ -451,12 +528,16 @@ class GoogleSheetsService {
           }
           await prefs.remove(key);
           if (queue.isNotEmpty) await _saveOfflineQueue(queue);
-          debugPrint('Migrado ${queue.length} item(s) da StringList legada "$key".');
+          debugPrint(
+            'Migrado ${queue.length} item(s) da StringList legada "$key".',
+          );
           return queue;
         }
       } catch (_) {}
       // Chave existe mas não conseguimos ler — remover
-      try { await prefs.remove(key); } catch (_) {}
+      try {
+        await prefs.remove(key);
+      } catch (_) {}
     }
     return [];
   }
@@ -528,26 +609,28 @@ class GoogleSheetsService {
 
     for (final payload in queue) {
       final action = (payload['acao'] ?? payload['action'])?.toString() ?? '';
-      final canonicalAction =
-          action == 'sendReport' || action == 'updateReport'
-              ? 'adicionar'
-              : action;
+      final canonicalAction = action == 'sendReport' || action == 'updateReport'
+          ? 'adicionar'
+          : action;
       if (canonicalAction != 'adicionar') {
         continue;
       }
 
-      final id = (payload['id'] ?? payload['reportId'] ?? payload['report_id'])
+      final id =
+          (payload['id'] ?? payload['reportId'] ?? payload['report_id'])
               ?.toString()
               .trim() ??
           '';
       if (id.isEmpty) continue;
 
-      final actionType = payload['acao_tipo']?.toString() == 'Editar' ||
+      final actionType =
+          payload['acao_tipo']?.toString() == 'Editar' ||
               action == 'updateReport'
           ? 'Editar'
           : 'Criar';
-      final syncStatus =
-          actionType == 'Editar' ? 'pending_update' : 'pending_create';
+      final syncStatus = actionType == 'Editar'
+          ? 'pending_update'
+          : 'pending_create';
       final existing = reportsById[id];
 
       if (existing == null) {
@@ -584,8 +667,9 @@ class GoogleSheetsService {
   }) async {
     final enrichedPayload = Map<String, dynamic>.from(payload);
     enrichedPayload['acao'] = 'adicionar';
-    enrichedPayload['acao_tipo'] =
-        syncStatus == 'pending_update' ? 'Editar' : 'Criar';
+    enrichedPayload['acao_tipo'] = syncStatus == 'pending_update'
+        ? 'Editar'
+        : 'Criar';
     await _ensurePendingReportsInLocalReports([enrichedPayload]);
   }
 
@@ -593,35 +677,42 @@ class GoogleSheetsService {
   /// ou qualquer outro dado do app. Útil para recuperação manual.
   Future<void> clearOfflineQueueOnly() async {
     final prefs = await SharedPreferences.getInstance();
-    try { await prefs.remove(_offlineQueueKey); } catch (_) {}
+    try {
+      await prefs.remove(_offlineQueueKey);
+    } catch (_) {}
     await _cleanupLegacyKeys(prefs);
     debugPrint('Fila offline limpa manualmente via clearOfflineQueueOnly.');
   }
 
   bool _isValidPendingItem(Map<String, dynamic>? item) {
     if (item == null || item.isEmpty) return false;
-    
+
     final action = (item['acao'] ?? item['action'] ?? '').toString().trim();
     if (action.isEmpty) return false;
-    
-    final id = (item['id'] ?? item['reportId'] ?? item['report_id'] ?? '').toString().trim();
+
+    final id = (item['id'] ?? item['reportId'] ?? item['report_id'] ?? '')
+        .toString()
+        .trim();
     if (id.isEmpty) return false;
-    
-    final status = (item['status'] ?? item['syncStatus'] ?? '').toString().toLowerCase().trim();
+
+    final status = (item['status'] ?? item['syncStatus'] ?? '')
+        .toString()
+        .toLowerCase()
+        .trim();
     if (status == 'synced' || status == 'success') return false;
-    
+
     if (item['alreadySynced'] == true) return false;
-    
+
     return true;
   }
 
   Future<int> cleanupAllOfflineQueuesAndReturnCount() async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Obter IDs dos relatórios locais para verificação
-    
+
     final List<Map<String, dynamic>> consolidatedQueue = [];
-    
+
     // Lista de todas as chaves de filas a inspecionar
     final List<String> allKeysToClean = [
       _offlineQueueKey,
@@ -635,14 +726,14 @@ class GoogleSheetsService {
       'pending_operations',
       ..._legacyOfflineQueueKeys,
     ];
-    
+
     for (final key in allKeysToClean) {
       if (!prefs.containsKey(key)) continue;
-      
+
       try {
         final value = prefs.get(key);
         List<dynamic> rawItems = [];
-        
+
         if (value is List) {
           rawItems = value;
         } else if (value is String) {
@@ -655,19 +746,19 @@ class GoogleSheetsService {
             }
           }
         }
-        
+
         final List<Map<String, dynamic>> validItems = [];
         for (var item in rawItems) {
           if (item is! Map) continue;
           final mapItem = Map<String, dynamic>.from(item);
-          
+
           if (!_isValidPendingItem(mapItem)) {
             continue;
           }
-          
+
           validItems.add(mapItem);
         }
-        
+
         if (validItems.isEmpty) {
           await prefs.remove(key);
         } else {
@@ -679,39 +770,47 @@ class GoogleSheetsService {
           }
         }
       } catch (e) {
-        debugPrint('cleanupAllOfflineQueuesAndReturnCount: Erro ao limpar a chave $key: $e. Removendo chave.');
+        debugPrint(
+          'cleanupAllOfflineQueuesAndReturnCount: Erro ao limpar a chave $key: $e. Removendo chave.',
+        );
         try {
           await prefs.remove(key);
         } catch (_) {}
       }
     }
-    
+
     await _ensurePendingReportsInLocalReports(consolidatedQueue);
-    final List<Map<String, dynamic>> normalizedQueue = _normalizeConsolidatedQueue(consolidatedQueue);
+    final List<Map<String, dynamic>> normalizedQueue =
+        _normalizeConsolidatedQueue(consolidatedQueue);
     await _saveOfflineQueue(normalizedQueue);
-    
+
     return normalizedQueue.length;
   }
 
-  List<Map<String, dynamic>> _normalizeConsolidatedQueue(List<Map<String, dynamic>> queue) {
+  List<Map<String, dynamic>> _normalizeConsolidatedQueue(
+    List<Map<String, dynamic>> queue,
+  ) {
     List<Map<String, dynamic>> parsedQueue = [];
     for (var item in queue) {
       final action = (item['acao'] ?? item['action'] ?? '').toString().trim();
       if (action.isEmpty) continue;
 
-      final id = (item['id'] ?? item['reportId'] ?? item['report_id'] ?? '').toString().trim();
+      final id = (item['id'] ?? item['reportId'] ?? item['report_id'] ?? '')
+          .toString()
+          .trim();
       if (id.isEmpty) continue;
 
       final canonicalAction = action == 'sendReport' || action == 'updateReport'
           ? 'adicionar'
           : action == 'deleteReport' || action == 'deletar_relatorio'
-              ? 'deletar_relatorio'
-              : action;
+          ? 'deletar_relatorio'
+          : action;
 
       item['acao'] = canonicalAction;
       item['id'] = id;
       if (canonicalAction == 'adicionar' &&
-          (item['acao_tipo'] == null || item['acao_tipo'].toString().trim().isEmpty)) {
+          (item['acao_tipo'] == null ||
+              item['acao_tipo'].toString().trim().isEmpty)) {
         item['acao_tipo'] = action == 'sendReport' ? 'Criar' : 'Editar';
       }
       parsedQueue.add(item);
@@ -749,7 +848,7 @@ class GoogleSheetsService {
             currentOp = Map<String, dynamic>.from(nextOp);
             currentOp['acao_tipo'] = 'Criar';
           } else if (nextAcao == 'deletar_relatorio') {
-            currentOp = null; 
+            currentOp = null;
           } else {
             currentOp = nextOp;
           }
@@ -785,31 +884,36 @@ class GoogleSheetsService {
   /// Normaliza a fila offline conforme as regras de negócio inteligentes do aplicativo
   Future<List<Map<String, dynamic>>> normalizeOfflineQueue() async {
     final List<Map<String, dynamic>> rawQueue = await _getOfflineQueue();
-    
+
     // Obter IDs dos relatórios locais para verificação
     final localReportIds = await _ensurePendingReportsInLocalReports(rawQueue);
 
     List<Map<String, dynamic>> parsedQueue = [];
     for (final mapItem in rawQueue) {
-      
       if (!_isValidPendingItem(mapItem)) {
         continue;
       }
 
-      final action = (mapItem['acao'] ?? mapItem['action'] ?? '').toString().trim();
+      final action = (mapItem['acao'] ?? mapItem['action'] ?? '')
+          .toString()
+          .trim();
       if (action.isEmpty) continue;
 
-      final id = (mapItem['id'] ?? mapItem['reportId'] ?? mapItem['report_id'] ?? '').toString().trim();
+      final id =
+          (mapItem['id'] ?? mapItem['reportId'] ?? mapItem['report_id'] ?? '')
+              .toString()
+              .trim();
       if (id.isEmpty) continue;
 
       final canonicalAction = action == 'sendReport' || action == 'updateReport'
           ? 'adicionar'
           : action == 'deleteReport' || action == 'deletar_relatorio'
-              ? 'deletar_relatorio'
-              : action;
+          ? 'deletar_relatorio'
+          : action;
 
       // Regra: remover item cujo relatório não existe e action não é delete
-      final isReportAction = canonicalAction == 'adicionar' ||
+      final isReportAction =
+          canonicalAction == 'adicionar' ||
           canonicalAction == 'deletar_relatorio';
       if (isReportAction &&
           canonicalAction != 'deletar_relatorio' &&
@@ -820,7 +924,8 @@ class GoogleSheetsService {
       mapItem['acao'] = canonicalAction;
       mapItem['id'] = id;
       if (canonicalAction == 'adicionar' &&
-          (mapItem['acao_tipo'] == null || mapItem['acao_tipo'].toString().trim().isEmpty)) {
+          (mapItem['acao_tipo'] == null ||
+              mapItem['acao_tipo'].toString().trim().isEmpty)) {
         mapItem['acao_tipo'] = action == 'sendReport' ? 'Criar' : 'Editar';
       }
       parsedQueue.add(mapItem);
@@ -861,7 +966,7 @@ class GoogleSheetsService {
             currentOp['acao_tipo'] = 'Criar';
           } else if (nextAcao == 'deletar_relatorio') {
             // create + delete antes de subir = remover tudo
-            currentOp = null; 
+            currentOp = null;
           } else {
             currentOp = nextOp;
           }
@@ -906,24 +1011,27 @@ class GoogleSheetsService {
   }
 
   Future<Map<String, dynamic>> _sendOperation(Map<String, dynamic> op) async {
-    final decoded =
-        await _postJson(_payloadForSync(op), timeout: const Duration(seconds: 40));
+    final decoded = await _postJson(
+      _payloadForSync(op),
+      timeout: const Duration(seconds: 40),
+    );
     if (!_isSuccessResponse(decoded)) {
       final msg = decoded['message']?.toString() ?? '';
       final action = op['acao']?.toString() ?? '';
-      
+
       // Se for deleção e o relatório já não existe no Sheets, consideramos sincronizado com sucesso!
-      if (action == 'deletar_relatorio' && 
-          (msg.toLowerCase().contains('não encontrado') || msg.toLowerCase().contains('nao encontrado'))) {
-        debugPrint('Deleção offline: Relatório já não existe no Sheets. Tratando como sucesso.');
-        return {
-          'status': 'success',
-          'success': true,
-          'message': msg,
-        };
+      if (action == 'deletar_relatorio' &&
+          (msg.toLowerCase().contains('não encontrado') ||
+              msg.toLowerCase().contains('nao encontrado'))) {
+        debugPrint(
+          'Deleção offline: Relatório já não existe no Sheets. Tratando como sucesso.',
+        );
+        return {'status': 'success', 'success': true, 'message': msg};
       }
-      
-      throw Exception(msg.isNotEmpty ? msg : 'Erro desconhecido no Apps Script');
+
+      throw Exception(
+        msg.isNotEmpty ? msg : 'Erro desconhecido no Apps Script',
+      );
     }
     return decoded;
   }
@@ -951,17 +1059,23 @@ class GoogleSheetsService {
         final action = op['acao']?.toString() ?? '';
         final id = op['id']?.toString().trim() ?? '';
         if (action != 'deletar_relatorio' && cloudIds.contains(id)) {
-          debugPrint('Relatorio $id ja existe no Sheets. Removendo da fila offline.');
+          debugPrint(
+            'Relatorio $id ja existe no Sheets. Removendo da fila offline.',
+          );
           return false;
         }
         if (action == 'deletar_relatorio' && !cloudIds.contains(id)) {
-          debugPrint('Relatorio $id ja nao existe no Sheets. Removendo delete da fila offline.');
+          debugPrint(
+            'Relatorio $id ja nao existe no Sheets. Removendo delete da fila offline.',
+          );
           return false;
         }
         return true;
       }).toList();
     } catch (e) {
-      debugPrint('Nao foi possivel confirmar relatorios ja enviados no Sheets: $e');
+      debugPrint(
+        'Nao foi possivel confirmar relatorios ja enviados no Sheets: $e',
+      );
       return queue;
     }
   }
@@ -999,7 +1113,9 @@ class GoogleSheetsService {
 
       if (changed) {
         await prefs.setString('local_reports', jsonEncode(updatedReports));
-        debugPrint('local_reports atualizado como synced para IDs: $syncedIds');
+        debugPrint(
+          'local_reports atualizado como synced: ${syncedIds.length} item(s)',
+        );
       }
     } catch (e) {
       debugPrint('Erro ao marcar local_reports como sincronizado: $e');
@@ -1116,7 +1232,9 @@ class GoogleSheetsService {
 
       Map<String, dynamic>? failedOp;
       if (item is Map) {
-        final id = (item['id'] ?? item['reportId'] ?? item['report_id'])?.toString().trim();
+        final id = (item['id'] ?? item['reportId'] ?? item['report_id'])
+            ?.toString()
+            .trim();
         if (id != null && id.isNotEmpty) {
           failedOp = queueById[id];
         }
@@ -1180,7 +1298,9 @@ class GoogleSheetsService {
           response.statusCode == 301 ||
           response.statusCode == 303) {
         var location = response.headers['location'];
-        location ??= _extractRedirectUrlFromHtml(utf8.decode(response.bodyBytes));
+        location ??= _extractRedirectUrlFromHtml(
+          utf8.decode(response.bodyBytes),
+        );
 
         if (location != null && location.isNotEmpty) {
           final redirectUri = Uri.parse(location);
@@ -1272,7 +1392,8 @@ class GoogleSheetsService {
       final action = (op['acao'] ?? op['action'] ?? '').toString().trim();
       final actionType = (op['acao_tipo'] ?? '').toString().trim();
       final report = reportsById[id];
-      final queuedAt = _pendingQueuedAt(op) ??
+      final queuedAt =
+          _pendingQueuedAt(op) ??
           report?.localUpdatedAt ??
           report?.updatedAt ??
           report?.lastSyncedAt;
@@ -1300,18 +1421,19 @@ class GoogleSheetsService {
         status: 'Pendente',
         rawData: Map<String, dynamic>.from(op),
       );
-    }).toList()
-      ..sort((a, b) {
-        final aDate = a.queuedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final bDate = b.queuedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        return bDate.compareTo(aDate);
-      });
+    }).toList()..sort((a, b) {
+      final aDate = a.queuedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate = b.queuedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bDate.compareTo(aDate);
+    });
   }
 
   String _pendingEntityType(String action) {
     final lower = action.toLowerCase();
     if (lower.contains('escola')) return 'Escola';
-    if (lower.contains('tecnico') || lower.contains('técnico')) return 'Técnico';
+    if (lower.contains('tecnico') || lower.contains('técnico')) {
+      return 'Técnico';
+    }
     return 'Relatório';
   }
 
@@ -1407,7 +1529,6 @@ class GoogleSheetsService {
     return ids;
   }
 
-
   /// Retorna os relatórios locais que possuem pendências de criação ou edição
   Future<List<ReportModel>> getPendingCreateOrUpdateReports() async {
     final createIds = await getPendingCreateIds();
@@ -1423,7 +1544,9 @@ class GoogleSheetsService {
         final List<dynamic> decodedList = jsonDecode(reportsJson);
         for (var item in decodedList) {
           try {
-            final report = ReportModel.fromJson(Map<String, dynamic>.from(item));
+            final report = ReportModel.fromJson(
+              Map<String, dynamic>.from(item),
+            );
             if (pendingIds.contains(report.id)) {
               reportsById[report.id] = report;
             }
@@ -1444,7 +1567,9 @@ class GoogleSheetsService {
 
         final report = _reportFromOfflinePayload(
           payload,
-          syncStatus: createIds.contains(id) ? 'pending_create' : 'pending_update',
+          syncStatus: createIds.contains(id)
+              ? 'pending_create'
+              : 'pending_update',
         );
         if (report != null) {
           reportsById[id] = report;
@@ -1485,7 +1610,9 @@ class GoogleSheetsService {
         for (var item in decodedList) {
           try {
             if (item is! Map) continue;
-            localReports.add(ReportModel.fromJson(Map<String, dynamic>.from(item)));
+            localReports.add(
+              ReportModel.fromJson(Map<String, dynamic>.from(item)),
+            );
           } catch (e) {
             debugPrint('Erro ao parsear relatório local: $e');
           }
@@ -1513,20 +1640,29 @@ class GoogleSheetsService {
         final map = Map<String, dynamic>.from(item);
         final base64 = map['base64']?.toString();
         if (base64 == null || base64.isEmpty) continue;
-        photos.add(PhotoItem(
-          path: base64,
-          comment: map['comentario']?.toString(),
-        ));
+        photos.add(
+          PhotoItem(path: base64, comment: map['comentario']?.toString()),
+        );
       }
     }
 
     // Normalização rigorosa conforme Regra 5:
-    final normalizedSubjects = JsonUtils.asStringList(payload['subjects'] ?? payload['motivos']);
-    final normalizedTechnicians = JsonUtils.asStringList(payload['technicians'] ?? payload['tecnicos']);
-    
-    final normalizedUrlFotos = JsonUtils.asNullableString(payload['urlFotos'] ?? payload['Link Foto']);
-    final normalizedFotosJson = JsonUtils.asNullableString(payload['fotosJson'] ?? payload['fotos_json']);
-    final normalizedSignatureUrl = JsonUtils.asNullableString(payload['signatureUrl'] ?? payload['urlAssinatura']);
+    final normalizedSubjects = JsonUtils.asStringList(
+      payload['subjects'] ?? payload['motivos'],
+    );
+    final normalizedTechnicians = JsonUtils.asStringList(
+      payload['technicians'] ?? payload['tecnicos'],
+    );
+
+    final normalizedUrlFotos = JsonUtils.asNullableString(
+      payload['urlFotos'] ?? payload['Link Foto'],
+    );
+    final normalizedFotosJson = JsonUtils.asNullableString(
+      payload['fotosJson'] ?? payload['fotos_json'],
+    );
+    final normalizedSignatureUrl = JsonUtils.asNullableString(
+      payload['signatureUrl'] ?? payload['urlAssinatura'],
+    );
 
     return ReportModel.fromJson({
       'id': id,
@@ -1541,7 +1677,10 @@ class GoogleSheetsService {
       'subjects': normalizedSubjects,
       'motivos': normalizedSubjects,
       'observations': payload['observacoes'],
-      'materiais_ti_json': payload['materiais_ti_json'] ?? payload['materiaisTiJson'] ?? payload['tiMaterials'],
+      'materiais_ti_json':
+          payload['materiais_ti_json'] ??
+          payload['materiaisTiJson'] ??
+          payload['tiMaterials'],
       'gre': payload['gre'],
       'technicians': normalizedTechnicians,
       'tecnicos': normalizedTechnicians,
@@ -1574,10 +1713,7 @@ class GoogleSheetsService {
       'gre': school.gre,
     };
     try {
-      await _postAppsScript(
-        Uri.parse(_scriptUrl),
-        payload: data,
-      );
+      await _postAppsScript(Uri.parse(_scriptUrl), payload: data);
     } catch (e) {
       debugPrint('Erro ao sincronizar escola: $e');
     }
@@ -1586,11 +1722,15 @@ class GoogleSheetsService {
   Future<List<SchoolModel>> fetchSchools() async {
     final Map<String, dynamic> data = {'acao': 'buscar_escolas'};
     try {
-      final decoded = await _postJson(data, timeout: const Duration(seconds: 40));
+      final decoded = await _postJson(
+        data,
+        timeout: const Duration(seconds: 40),
+      );
       if (_isSuccess(decoded)) {
-        return _readMapList(decoded['data'], 'fetchSchools')
-            .map((item) => SchoolModel.fromJson(item))
-            .toList();
+        return _readMapList(
+          decoded['data'],
+          'fetchSchools',
+        ).map((item) => SchoolModel.fromJson(item)).toList();
       }
     } catch (e) {
       debugPrint('Erro ao buscar escolas: $e');
@@ -1611,10 +1751,7 @@ class GoogleSheetsService {
       'senha': tech.password,
     };
     try {
-      await _postAppsScript(
-        Uri.parse(_scriptUrl),
-        payload: data,
-      );
+      await _postAppsScript(Uri.parse(_scriptUrl), payload: data);
     } catch (e) {
       debugPrint('Erro ao sincronizar tecnico: $e');
     }
@@ -1624,9 +1761,7 @@ class GoogleSheetsService {
   // SINCRONIZAÇÃO DE VERSÃO
   // ============================================================================
   Future<Map<String, dynamic>> checkVersion() async {
-    final Map<String, dynamic> data = {
-      'acao': 'checar_versao',
-    };
+    final Map<String, dynamic> data = {'acao': 'checar_versao'};
     try {
       var request = http.Request('POST', Uri.parse(_scriptUrl));
       request.headers.addAll(_jsonHeaders);
@@ -1634,7 +1769,9 @@ class GoogleSheetsService {
       request.followRedirects = false; // Desativa redirect automático
 
       var client = http.Client();
-      var streamedResponse = await client.send(request).timeout(const Duration(seconds: 30));
+      var streamedResponse = await client
+          .send(request)
+          .timeout(const Duration(seconds: 30));
       var response = await http.Response.fromStream(streamedResponse);
 
       http.Response finalResponse = response;
@@ -1642,7 +1779,9 @@ class GoogleSheetsService {
       if (response.statusCode == 302 || response.statusCode == 303) {
         final location = response.headers['location'];
         if (location != null) {
-          finalResponse = await http.get(Uri.parse(location)).timeout(const Duration(seconds: 30));
+          finalResponse = await http
+              .get(Uri.parse(location))
+              .timeout(const Duration(seconds: 30));
         }
       }
 
@@ -1674,9 +1813,18 @@ class GoogleSheetsService {
         continue;
       }
 
-      final existingDate = existing.updatedAt ?? existing.localUpdatedAt ?? existing.lastSyncedAt ?? existing.visitDate;
-      final newDate = report.updatedAt ?? report.localUpdatedAt ?? report.lastSyncedAt ?? report.visitDate;
-      if (newDate.isAfter(existingDate) || newDate.isAtSameMomentAs(existingDate)) {
+      final existingDate =
+          existing.updatedAt ??
+          existing.localUpdatedAt ??
+          existing.lastSyncedAt ??
+          existing.visitDate;
+      final newDate =
+          report.updatedAt ??
+          report.localUpdatedAt ??
+          report.lastSyncedAt ??
+          report.visitDate;
+      if (newDate.isAfter(existingDate) ||
+          newDate.isAtSameMomentAs(existingDate)) {
         byId[id] = report;
       }
     }
@@ -1698,7 +1846,9 @@ class GoogleSheetsService {
       request.followRedirects = false; // Desativa redirect automático
 
       var client = http.Client();
-      var streamedResponse = await client.send(request).timeout(const Duration(seconds: 40));
+      var streamedResponse = await client
+          .send(request)
+          .timeout(const Duration(seconds: 40));
       var response = await http.Response.fromStream(streamedResponse);
 
       http.Response finalResponse = response;
@@ -1707,13 +1857,15 @@ class GoogleSheetsService {
       if (response.statusCode == 302 || response.statusCode == 303) {
         final location = response.headers['location'];
         if (location != null) {
-          finalResponse = await http.get(Uri.parse(location)).timeout(const Duration(seconds: 40));
+          finalResponse = await http
+              .get(Uri.parse(location))
+              .timeout(const Duration(seconds: 40));
         }
       }
 
       if (finalResponse.statusCode == 200) {
         final body = utf8.decode(finalResponse.bodyBytes);
-        
+
         if (body.trimLeft().startsWith('<')) {
           throw Exception('Apps Script retornou HTML em vez de JSON.');
         }
@@ -1726,7 +1878,11 @@ class GoogleSheetsService {
         final ok = _isSuccessResponse(decoded);
 
         if (!ok) {
-          throw Exception(decoded['message'] ?? decoded['error'] ?? 'Erro ao baixar relatórios');
+          throw Exception(
+            decoded['message'] ??
+                decoded['error'] ??
+                'Erro ao baixar relatórios',
+          );
         }
 
         // Garante que escolas estejam carregadas antes de inferir município
@@ -1749,19 +1905,49 @@ class GoogleSheetsService {
             // dependendo da versão deployada. JsonUtils trata ambos sem cast.
 
             // Listas → garantir List<String>
-            row['subjects']       = JsonUtils.asStringList(row['subjects']       ?? row['motivos']       ?? row['subjectsList']    ?? row['Motivos / Assuntos']);
-            row['technicians']    = JsonUtils.asStringList(row['technicians']    ?? row['tecnicos']      ?? row['techniciansList'] ?? row['Técnicos Presentes'] ?? row['Tecnicos Presentes']);
-            row['motivos']        = row['subjects'];   // alias consistente
-            row['tecnicos']       = row['technicians']; // alias consistente
-            row['subjectsList']   = row['subjects'];   // evitar re-parse
+            row['subjects'] = JsonUtils.asStringList(
+              row['subjects'] ??
+                  row['motivos'] ??
+                  row['subjectsList'] ??
+                  row['Motivos / Assuntos'],
+            );
+            row['technicians'] = JsonUtils.asStringList(
+              row['technicians'] ??
+                  row['tecnicos'] ??
+                  row['techniciansList'] ??
+                  row['Técnicos Presentes'] ??
+                  row['Tecnicos Presentes'],
+            );
+            row['motivos'] = row['subjects']; // alias consistente
+            row['tecnicos'] = row['technicians']; // alias consistente
+            row['subjectsList'] = row['subjects']; // evitar re-parse
             row['techniciansList'] = row['technicians'];
 
             // Strings opcionais → garantir String? (nunca List)
-            row['fotosJson']    = JsonUtils.asNullableString(row['fotosJson']    ?? row['fotos_json']    ?? row['Fotos JSON']  ?? row['FOTOS_JSON']);
-            row['fotos_json']   = row['fotosJson'];
-            row['materiais_ti_json'] = JsonUtils.asNullableString(row['materiais_ti_json'] ?? row['tiMaterials'] ?? row['MATERIAIS_TI_JSON']);
-            row['urlFotos']     = JsonUtils.asNullableString(row['urlFotos']     ?? row['Link Foto']     ?? row['Link Fotos'] ?? row['url_fotos']);
-            row['signatureUrl'] = JsonUtils.asNullableString(row['signatureUrl'] ?? row['urlAssinatura'] ?? row['Link Assinatura'] ?? row['URL_ASSINATURA']);
+            row['fotosJson'] = JsonUtils.asNullableString(
+              row['fotosJson'] ??
+                  row['fotos_json'] ??
+                  row['Fotos JSON'] ??
+                  row['FOTOS_JSON'],
+            );
+            row['fotos_json'] = row['fotosJson'];
+            row['materiais_ti_json'] = JsonUtils.asNullableString(
+              row['materiais_ti_json'] ??
+                  row['tiMaterials'] ??
+                  row['MATERIAIS_TI_JSON'],
+            );
+            row['urlFotos'] = JsonUtils.asNullableString(
+              row['urlFotos'] ??
+                  row['Link Foto'] ??
+                  row['Link Fotos'] ??
+                  row['url_fotos'],
+            );
+            row['signatureUrl'] = JsonUtils.asNullableString(
+              row['signatureUrl'] ??
+                  row['urlAssinatura'] ??
+                  row['Link Assinatura'] ??
+                  row['URL_ASSINATURA'],
+            );
             row['urlAssinatura'] = row['signatureUrl'];
 
             // photos: se vier como List<dynamic> de Maps, mantém; se String, trata como urlFotos
@@ -1774,19 +1960,36 @@ class GoogleSheetsService {
 
             // Resolve cidade com todos os aliases possíveis
             String? city = _firstNonEmpty(row, [
-              'schoolCity', 'municipio', 'município', 'municipioEscola',
-              'cidade', 'city', 'Município', 'Municipio', 'Cidade',
-              'Município da Escola', 'Cidade da Escola',
+              'schoolCity',
+              'municipio',
+              'município',
+              'municipioEscola',
+              'cidade',
+              'city',
+              'Município',
+              'Municipio',
+              'Cidade',
+              'Município da Escola',
+              'Cidade da Escola',
             ]);
 
             // Lê INEP com todos os aliases possíveis
             final String? inep = _firstNonEmpty(row, [
-              'schoolInep', 'inep', 'INEP', 'codigoInep', 'códigoInep',
-              'codInep', 'inepEscola', 'INEP Escola', 'Código INEP',
+              'schoolInep',
+              'inep',
+              'INEP',
+              'codigoInep',
+              'códigoInep',
+              'codInep',
+              'inepEscola',
+              'INEP Escola',
+              'Código INEP',
             ]);
 
             // Se cidade veio vazia mas INEP existe, busca no SchoolService
-            if ((city == null || city.isEmpty) && inep != null && inep.isNotEmpty) {
+            if ((city == null || city.isEmpty) &&
+                inep != null &&
+                inep.isNotEmpty) {
               city = findCityByInep(inep);
             }
 
@@ -1827,7 +2030,9 @@ class GoogleSheetsService {
       request.followRedirects = false;
 
       var client = http.Client();
-      var streamedResponse = await client.send(request).timeout(const Duration(seconds: 40));
+      var streamedResponse = await client
+          .send(request)
+          .timeout(const Duration(seconds: 40));
       var response = await http.Response.fromStream(streamedResponse);
 
       http.Response finalResponse = response;
@@ -1835,7 +2040,9 @@ class GoogleSheetsService {
       if (response.statusCode == 302 || response.statusCode == 303) {
         final location = response.headers['location'];
         if (location != null) {
-          finalResponse = await http.get(Uri.parse(location)).timeout(const Duration(seconds: 40));
+          finalResponse = await http
+              .get(Uri.parse(location))
+              .timeout(const Duration(seconds: 40));
         }
       }
 
@@ -1843,10 +2050,14 @@ class GoogleSheetsService {
         final decoded = _parseAndValidateResponse(finalResponse);
         if (_isSuccess(decoded)) {
           final rows = _readMapList(decoded['data'], 'fetchFuncionarios');
-          return rows.map((item) => {
-            'matricula': item['matricula']?.toString() ?? '',
-            'nome': item['nome']?.toString() ?? '',
-          }).toList();
+          return rows
+              .map(
+                (item) => {
+                  'matricula': item['matricula']?.toString() ?? '',
+                  'nome': item['nome']?.toString() ?? '',
+                },
+              )
+              .toList();
         }
       }
     } catch (e) {
@@ -1868,10 +2079,12 @@ class GoogleSheetsService {
       var request = http.Request('POST', Uri.parse(_scriptUrl));
       request.headers.addAll(_jsonHeaders);
       request.body = jsonEncode(data);
-      request.followRedirects = false; 
+      request.followRedirects = false;
 
       var client = http.Client();
-      var streamedResponse = await client.send(request).timeout(const Duration(seconds: 40));
+      var streamedResponse = await client
+          .send(request)
+          .timeout(const Duration(seconds: 40));
       var response = await http.Response.fromStream(streamedResponse);
 
       http.Response finalResponse = response;
@@ -1879,7 +2092,9 @@ class GoogleSheetsService {
       if (response.statusCode == 302 || response.statusCode == 303) {
         final location = response.headers['location'];
         if (location != null) {
-          finalResponse = await http.get(Uri.parse(location)).timeout(const Duration(seconds: 40));
+          finalResponse = await http
+              .get(Uri.parse(location))
+              .timeout(const Duration(seconds: 40));
         }
       }
 
@@ -1887,21 +2102,28 @@ class GoogleSheetsService {
         final decoded = _parseAndValidateResponse(finalResponse);
         if (_isSuccess(decoded)) {
           List<TechnicianModel> loaded = [];
-          for (final item in _readMapList(decoded['data'], 'fetchTechnicians')) {
-            loaded.add(TechnicianModel(
-              id: item['id'] ?? '',
-              name: fixMojibake(item['nome']?.toString() ?? ''),
-              registration: fixMojibake(item['matricula']?.toString() ?? ''),
-              email: fixMojibake(item['email']?.toString() ?? ''),
-              permissions: fixMojibake(item['permissao']?.toString() ?? ''),
-              password: item['senha']?.toString().isEmpty == false ? item['senha'] : null,
-            ));
+          for (final item in _readMapList(
+            decoded['data'],
+            'fetchTechnicians',
+          )) {
+            loaded.add(
+              TechnicianModel(
+                id: item['id'] ?? '',
+                name: fixMojibake(item['nome']?.toString() ?? ''),
+                registration: fixMojibake(item['matricula']?.toString() ?? ''),
+                email: fixMojibake(item['email']?.toString() ?? ''),
+                permissions: fixMojibake(item['permissao']?.toString() ?? ''),
+                password: item['senha']?.toString().isEmpty == false
+                    ? item['senha']
+                    : null,
+              ),
+            );
           }
           return loaded;
         }
       }
     } catch (e) {
-          debugPrint('Erro ao buscar técnicos: $e');
+      debugPrint('Erro ao buscar técnicos: $e');
     }
     return [];
   }
@@ -1909,7 +2131,6 @@ class GoogleSheetsService {
   // ============================================================================
   // HELPERS: INEP e MUNICÍPIO
   // ============================================================================
-
 
   /// Retorna o primeiro valor não-vazio dentre as chaves fornecidas no mapa.
   static String? _firstNonEmpty(Map<String, dynamic> row, List<String> keys) {
@@ -1971,14 +2192,18 @@ class GoogleSheetsService {
       request.followRedirects = false;
 
       var client = http.Client();
-      var streamedResponse = await client.send(request).timeout(const Duration(seconds: 60));
+      var streamedResponse = await client
+          .send(request)
+          .timeout(const Duration(seconds: 60));
       var response = await http.Response.fromStream(streamedResponse);
 
       http.Response finalResponse = response;
       if (response.statusCode == 302 || response.statusCode == 303) {
         final location = response.headers['location'];
         if (location != null) {
-          finalResponse = await http.get(Uri.parse(location)).timeout(const Duration(seconds: 60));
+          finalResponse = await http
+              .get(Uri.parse(location))
+              .timeout(const Duration(seconds: 60));
         }
       }
 
@@ -1995,7 +2220,7 @@ class GoogleSheetsService {
   Map<String, dynamic> _parseAndValidateResponse(http.Response response) {
     final body = utf8.decode(response.bodyBytes);
     final contentType = response.headers['content-type']?.toLowerCase() ?? '';
-    
+
     final trimmedLeft = body.trimLeft();
     final lowerBody = trimmedLeft.toLowerCase();
     if (contentType.contains('text/html') ||
@@ -2004,16 +2229,15 @@ class GoogleSheetsService {
         lowerBody.startsWith('<body') ||
         lowerBody.startsWith('<')) {
       throw Exception(
-        'Apps Script retornou HTML em vez de JSON após redirect.'
+        'Apps Script retornou HTML em vez de JSON após redirect.',
       );
     }
 
     dynamic rawDecoded;
     try {
       rawDecoded = jsonDecode(body);
-    } catch (e, stack) {
-      debugPrint('ERRO AO DECODIFICAR RESPOSTA APPS SCRIPT: $e');
-      debugPrintStack(stackTrace: stack);
+    } catch (e) {
+      debugPrint('Erro ao decodificar resposta do Apps Script: $e');
       rethrow;
     }
 
@@ -2025,11 +2249,8 @@ class GoogleSheetsService {
       throw Exception('Resposta JSON inesperada do Apps Script');
     } catch (e) {
       throw Exception(
-        'A API retornou uma resposta que não pôde ser decodificada como JSON. Detalhes: $e'
+        'A API retornou uma resposta que não pôde ser decodificada como JSON. Detalhes: $e',
       );
     }
   }
-
-  
-
 }
