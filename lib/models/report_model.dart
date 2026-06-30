@@ -110,7 +110,9 @@ class ReportModel {
   final String? responsiblePerson;
 
   final Uint8List? signatureBytes;
+  final List<Uint8List>? signatureBytesList;
   final String? signatureUrl;
+  final List<String>? signatureUrlList;
   final String? urlFotos;
   final String? fotosJson;
 
@@ -137,7 +139,9 @@ class ReportModel {
     this.technicians = const [],
     this.responsiblePerson,
     this.signatureBytes,
+    this.signatureBytesList,
     this.signatureUrl,
+    this.signatureUrlList,
     this.urlFotos,
     this.fotosJson,
     this.syncStatus = 'synced',
@@ -166,7 +170,9 @@ class ReportModel {
     List<String>? technicians,
     String? responsiblePerson,
     Uint8List? signatureBytes,
+    List<Uint8List>? signatureBytesList,
     String? signatureUrl,
+    List<String>? signatureUrlList,
     String? urlFotos,
     String? fotosJson,
     String? syncStatus,
@@ -192,7 +198,9 @@ class ReportModel {
       technicians: technicians ?? this.technicians,
       responsiblePerson: responsiblePerson ?? this.responsiblePerson,
       signatureBytes: signatureBytes ?? this.signatureBytes,
+      signatureBytesList: signatureBytesList ?? this.signatureBytesList,
       signatureUrl: signatureUrl ?? this.signatureUrl,
+      signatureUrlList: signatureUrlList ?? this.signatureUrlList,
       urlFotos: urlFotos ?? this.urlFotos,
       fotosJson: fotosJson ?? this.fotosJson,
       syncStatus: syncStatus ?? this.syncStatus,
@@ -236,7 +244,14 @@ class ReportModel {
     'signatureBytes': signatureBytes != null
         ? base64Encode(signatureBytes!)
         : null,
+    'signatureBytesList': signatureBytesList
+        ?.map((bytes) => base64Encode(bytes))
+        .toList(),
+    'assinaturaBase64List': signatureBytesList
+        ?.map((bytes) => base64Encode(bytes))
+        .toList(),
     'signatureUrl': signatureUrl,
+    'signatureUrlList': signatureUrlList,
     'urlAssinatura': signatureUrl,
     'syncStatus': syncStatus,
     'lastSyncedAt': lastSyncedAt?.toIso8601String(),
@@ -468,6 +483,67 @@ class ReportModel {
     }
   }
 
+  static List<Uint8List>? _readSignatureBytesList(Map<String, dynamic> json) {
+    final dynamic listValue = json['signatureBytesList'] ?? json['assinaturaBase64List'];
+    if (listValue == null) return null;
+    if (listValue is List) {
+      final result = <Uint8List>[];
+      for (final item in listValue) {
+        final source = JsonUtils.asNullableString(item);
+        if (source == null) continue;
+        try {
+          final clean = source.contains(',') ? source.split(',').last : source;
+          result.add(base64Decode(clean));
+        } catch (_) {
+          continue;
+        }
+      }
+      return result.isEmpty ? null : result;
+    }
+    final stringValue = JsonUtils.asNullableString(listValue);
+    if (stringValue == null) return null;
+    try {
+      final decoded = jsonDecode(stringValue);
+      if (decoded is List) {
+        return _readSignatureBytesList({'signatureBytesList': decoded});
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static List<String>? _readSignatureUrlList(Map<String, dynamic> json) {
+    final dynamic listValue = json['signatureUrlList'];
+    if (listValue == null) {
+      final singleUrl = JsonUtils.asNullableString(
+        json['signatureUrl'] ?? json['urlAssinatura'],
+      );
+      return singleUrl == null ? null : [singleUrl];
+    }
+    if (listValue is List) {
+      final result = <String>[];
+      for (final item in listValue) {
+        final url = JsonUtils.asNullableString(item);
+        if (url != null) result.add(url);
+      }
+      return result.isEmpty ? null : result;
+    }
+    final stringValue = JsonUtils.asNullableString(listValue);
+    if (stringValue == null) return null;
+    if (stringValue.startsWith('[') && stringValue.endsWith(']')) {
+      try {
+        final decoded = jsonDecode(stringValue);
+        if (decoded is List) {
+          return _readSignatureUrlList({'signatureUrlList': decoded});
+        }
+      } catch (_) {}
+    }
+    return stringValue
+        .split(RegExp(r',|;|\n'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
   factory ReportModel.fromJson(Map<String, dynamic> json) {
     final visitDate =
         _tryParseDate(
@@ -588,6 +664,8 @@ class ReportModel {
             json['Link Assinatura'] ??
             json['URL_ASSINATURA'],
       ),
+      signatureUrlList: _readSignatureUrlList(json),
+      signatureBytesList: _readSignatureBytesList(json),
       syncStatus: fixedString(json['syncStatus'] ?? 'synced'),
       lastSyncedAt: _tryParseDate(json['lastSyncedAt']),
       localUpdatedAt: _tryParseDate(json['localUpdatedAt']),

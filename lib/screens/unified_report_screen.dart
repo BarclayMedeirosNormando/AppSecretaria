@@ -49,8 +49,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
   final List<PhotoItem> _selectedPhotos = [];
   final List<TiMaterialItem> _tiMaterials = [];
   final ImagePicker _picker = ImagePicker();
-
-  late SignatureController _signatureController;
+  final List<SignatureController> _signatureControllers = [];
 
   final SchoolService _schoolService = SchoolService();
   final TechnicianService _technicianService = TechnicianService();
@@ -344,11 +343,6 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
     super.initState();
     _schoolSearchController = TextEditingController();
     _schoolSearchFocusNode = FocusNode();
-    _signatureController = SignatureController(
-      penStrokeWidth: 3,
-      penColor: Colors.black,
-      exportBackgroundColor: Colors.white,
-    );
 
     if (widget.existingReport != null) {
       final r = widget.existingReport!;
@@ -367,6 +361,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
       _filterRegional = r.gre;
       _filterCity = r.schoolCity;
       _schoolSearchController.text = r.schoolName;
+      _syncSignatureControllersWithTechnicians();
 
       // Carregar INEP do relatório existente
       _selectedSchoolInep = r.schoolInep;
@@ -396,6 +391,37 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
 
     _loadSchools();
     _loadTechnicians();
+    _syncSignatureControllersWithTechnicians();
+  }
+
+  void _syncSignatureControllersWithTechnicians() {
+    final keepCount = _selectedTechnicians.length;
+    final existingCount = _signatureControllers.length;
+    final newControllers = <SignatureController>[];
+
+    for (var index = 0; index < keepCount; index++) {
+      if (index < existingCount) {
+        newControllers.add(_signatureControllers[index]);
+      } else {
+        newControllers.add(SignatureController(
+          penStrokeWidth: 3,
+          penColor: Colors.black,
+          exportBackgroundColor: Colors.white,
+        ));
+      }
+    }
+
+    for (var index = keepCount; index < existingCount; index++) {
+      _signatureControllers[index].dispose();
+    }
+
+    _signatureControllers
+      ..clear()
+      ..addAll(newControllers);
+
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _presentDatePicker() async {
@@ -447,12 +473,26 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
 
   void _submitData() async {
     if (_formKey.currentState!.validate() && _selectedDate != null && _selectedSchool != null) {
-      Uint8List? sigBytes;
-      if (_signatureController.isNotEmpty) {
-        sigBytes = await _signatureController.toPngBytes();
-      } else if (widget.existingReport != null) {
-        sigBytes = widget.existingReport!.signatureBytes;
-      } else {
+      final signatureBytesList = <Uint8List>[];
+      for (var controller in _signatureControllers) {
+        if (controller.isNotEmpty) {
+          final bytes = await controller.toPngBytes();
+          if (bytes != null && bytes.isNotEmpty) {
+            signatureBytesList.add(bytes);
+          }
+        }
+      }
+
+      if (signatureBytesList.isEmpty && widget.existingReport != null) {
+        if (widget.existingReport!.signatureBytesList != null &&
+            widget.existingReport!.signatureBytesList!.isNotEmpty) {
+          signatureBytesList.addAll(widget.existingReport!.signatureBytesList!);
+        } else if (widget.existingReport!.signatureBytes != null) {
+          signatureBytesList.add(widget.existingReport!.signatureBytes!);
+        }
+      }
+
+      if (signatureBytesList.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('A assinatura é obrigatória para novos relatórios.')),
         );
@@ -476,8 +516,11 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
         photos: _selectedPhotos,
         technicians: _selectedTechnicians,
         responsiblePerson: !_isTechnicalAnalysis ? _selectedResponsible : null,
-        signatureBytes: sigBytes,
+        signatureBytes: signatureBytesList.isNotEmpty ? signatureBytesList.first : widget.existingReport?.signatureBytes,
+        signatureBytesList: signatureBytesList.isNotEmpty ? signatureBytesList : widget.existingReport?.signatureBytesList,
         signatureUrl: widget.existingReport?.signatureUrl,
+        signatureUrlList: widget.existingReport?.signatureUrlList ??
+            (widget.existingReport?.signatureUrl != null ? [widget.existingReport!.signatureUrl!] : null),
       );
 
       if (!mounted) return;
@@ -1114,7 +1157,10 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
       'Técnico(s)',
       technicianNames,
       _selectedTechnicians,
-      (res) => _selectedTechnicians = res,
+      (res) {
+        _selectedTechnicians = res;
+        _syncSignatureControllersWithTechnicians();
+      },
     );
   }
 
@@ -1566,71 +1612,109 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
       title: _isTechnicalAnalysis ? 'Assinatura do Técnico' : 'Assinatura do Responsável',
       icon: Icons.draw_outlined,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (widget.existingReport != null && widget.existingReport!.signatureBytes != null && _signatureController.isEmpty)
+          if (_selectedTechnicians.isEmpty)
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: theme.colorScheme.tertiary.withValues(alpha: 0.1),
+                color: theme.colorScheme.surfaceVariant.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: theme.colorScheme.tertiary.withValues(alpha: 0.3)),
+                border: Border.all(color: theme.colorScheme.outlineVariant.withOpacity(0.35)),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: theme.colorScheme.tertiary, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Assinatura salva anteriormente. Desenhe abaixo apenas se quiser alterar a assinatura atual.',
-                      style: TextStyle(color: theme.colorScheme.tertiary, fontSize: 13),
+              child: Text(
+                'Selecione pelo menos um técnico para capturar a assinatura.',
+                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            )
+          else ...[
+            if (widget.existingReport != null &&
+                widget.existingReport!.signatureBytesList != null &&
+                widget.existingReport!.signatureBytesList!.isNotEmpty &&
+                _signatureControllers.every((c) => c.isEmpty))
+              Container(
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.tertiary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: theme.colorScheme.tertiary.withOpacity(0.25)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: theme.colorScheme.tertiary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Assinaturas salvas anteriormente. Desenhe abaixo apenas se quiser alterar as assinaturas atuais.',
+                        style: TextStyle(color: theme.colorScheme.tertiary, fontSize: 13),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.draw_outlined, size: 18, color: theme.colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 8),
-                          Text('Área de Assinatura', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 13, fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                      TextButton.icon(
-                        onPressed: () => _signatureController.clear(),
-                        icon: const Icon(Icons.cleaning_services_rounded, size: 16),
-                        label: const Text('Limpar'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: theme.colorScheme.error,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          minimumSize: Size.zero,
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _selectedTechnicians.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 18),
+              itemBuilder: (context, index) {
+                final technician = _selectedTechnicians[index];
+                debugPrint('Construindo assinatura para técnico #$index: $technician');
+                final controller = index < _signatureControllers.length
+                    ? _signatureControllers[index]
+                    : SignatureController(
+                        penStrokeWidth: 3,
+                        penColor: Colors.black,
+                        exportBackgroundColor: Colors.white,
+                      );
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Assinatura de $technician',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
                         ),
+                        TextButton.icon(
+                          onPressed: () => controller.clear(),
+                          icon: const Icon(Icons.cleaning_services_rounded, size: 16),
+                          label: const Text('Limpar'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: theme.colorScheme.error,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            minimumSize: Size.zero,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: theme.colorScheme.outlineVariant),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
-                  ),
-                ),
-                Signature(
-                  controller: _signatureController,
-                  height: 180,
-                  backgroundColor: isDark ? const Color(0xFFE0E0E0) : theme.colorScheme.surface,
-                ),
-              ],
+                      child: Signature(
+                        controller: controller,
+                        height: 180,
+                        backgroundColor: isDark ? const Color(0xFFE0E0E0) : theme.colorScheme.surface,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1750,7 +1834,9 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
     _schoolSearchController.dispose();
     _schoolSearchFocusNode.dispose();
     _observationsController.dispose();
-    _signatureController.dispose();
+    for (var controller in _signatureControllers) {
+      controller.dispose();
+    }
     super.dispose();
   }
 }

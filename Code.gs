@@ -280,8 +280,8 @@ function loginAction(p) {
 }
 
 function checkVersionAction(p) {
-  // static version – adjust if you store elsewhere
-  const version = '2.1.2';
+  // static version – update when releasing a new app build
+  const version = '3.1.0';
   const result = {
     status: 'success',
     success: true,

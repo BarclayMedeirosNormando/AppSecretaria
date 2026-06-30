@@ -100,17 +100,7 @@ class PdfGenerator {
       }
     }
 
-    Uint8List? signatureBytes = report.signatureBytes;
-    if ((signatureBytes == null || signatureBytes.isEmpty) &&
-        report.signatureUrl != null &&
-        report.signatureUrl!.trim().isNotEmpty) {
-      signatureBytes = await _loadImageBytes(report.signatureUrl!);
-      if (signatureBytes == null || signatureBytes.isEmpty) {
-        debugPrint(
-          'Nao foi possivel carregar assinatura remota: ${report.signatureUrl}',
-        );
-      }
-    }
+    final signatureBytesList = await _resolveSignatureBytesList(report);
 
     pdf.addPage(
       pw.MultiPage(
@@ -132,7 +122,7 @@ class PdfGenerator {
             ..._buildTiMaterials(report),
           ],
           pw.SizedBox(height: 48),
-          _buildSignatureSection(report, signatureBytes),
+          _buildSignatureSection(report, signatureBytesList),
         ],
       ),
     );
@@ -246,6 +236,37 @@ class PdfGenerator {
     } catch (e) {
       debugPrint('Erro ao carregar imagem ($source): $e');
     }
+    return null;
+  }
+
+  static Future<List<Uint8List>?> _resolveSignatureBytesList(ReportModel report) async {
+    if (report.signatureBytesList != null && report.signatureBytesList!.isNotEmpty) {
+      return report.signatureBytesList;
+    }
+
+    if (report.signatureBytes != null && report.signatureBytes!.isNotEmpty) {
+      return [report.signatureBytes!];
+    }
+
+    final bytes = <Uint8List>[];
+    if (report.signatureUrlList != null && report.signatureUrlList!.isNotEmpty) {
+      for (final url in report.signatureUrlList!) {
+        if (url.trim().isEmpty) continue;
+        final loaded = await _loadImageBytes(url);
+        if (loaded != null && loaded.isNotEmpty) {
+          bytes.add(loaded);
+        }
+      }
+      if (bytes.isNotEmpty) return bytes;
+    }
+
+    if (report.signatureUrl != null && report.signatureUrl!.trim().isNotEmpty) {
+      final loaded = await _loadImageBytes(report.signatureUrl!);
+      if (loaded != null && loaded.isNotEmpty) {
+        return [loaded];
+      }
+    }
+
     return null;
   }
 
@@ -616,23 +637,46 @@ class PdfGenerator {
 
   static pw.Widget _buildSignatureSection(
     ReportModel report,
-    Uint8List? signatureBytes,
+    List<Uint8List>? signatureBytesList,
   ) {
-    final label = _signatureLabel(report);
+    if (signatureBytesList != null && signatureBytesList.isNotEmpty) {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          for (var index = 0; index < signatureBytesList.length; index++) ...[
+            pw.Center(
+              child: pw.Container(
+                width: 140,
+                height: 50,
+                constraints: const pw.BoxConstraints(maxWidth: 140),
+                child: pw.Image(
+                  pw.MemoryImage(signatureBytesList[index]),
+                  fit: pw.BoxFit.contain,
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Center(
+              child: pw.Text(
+                _signatureLabelForIndex(report, index),
+                style: const pw.TextStyle(fontSize: 9),
+              ),
+            ),
+            if (index < signatureBytesList.length - 1) ...[
+              pw.SizedBox(height: 12),
+              pw.Container(width: double.infinity, height: 0.6, color: PdfColors.grey300),
+              pw.SizedBox(height: 12),
+            ],
+          ],
+        ],
+      );
+    }
 
+    final label = _signatureLabel(report);
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
-        if (signatureBytes != null && signatureBytes.isNotEmpty)
-          pw.Container(
-            height: 44,
-            child: pw.Image(
-              pw.MemoryImage(signatureBytes),
-              fit: pw.BoxFit.contain,
-            ),
-          )
-        else
-          pw.SizedBox(height: 50),
+        pw.SizedBox(height: 50),
         pw.Container(width: 260, height: 1, color: PdfColors.black),
         pw.SizedBox(height: 6),
         pw.Text(label, style: const pw.TextStyle(fontSize: 11)),
@@ -667,6 +711,38 @@ class PdfGenerator {
     }
     if (matricula.isNotEmpty) return '$nome - Matrícula: $matricula';
     return nome.isNotEmpty ? nome : 'Assinatura do Responsável da Escola';
+  }
+
+  static String _signatureLabelForIndex(ReportModel report, int index) {
+    if (report.isTechnicalAnalysis) {
+      final nome = index < report.technicians.length
+          ? report.technicians[index].trim().replaceAll(RegExp(r'^,\s*'), '')
+          : '';
+      if (nome.isNotEmpty) {
+        var matricula = '';
+        try {
+          final tech = TechnicianService().technicians.firstWhere(
+            (t) => t.name == nome,
+          );
+          matricula = tech.registration;
+        } catch (_) {}
+        return matricula.isNotEmpty
+            ? '$nome - Matrícula: $matricula'
+            : nome;
+      }
+      return 'Assinatura do Técnico ${index + 1}';
+    }
+
+    final nome = report.responsiblePerson ?? '';
+    if (nome.isNotEmpty) {
+      var matricula = '';
+      try {
+        final emp = EmployeeService().all.firstWhere((e) => e.name == nome);
+        matricula = emp.matricula;
+      } catch (_) {}
+      return matricula.isNotEmpty ? '$nome - Matrícula: $matricula' : nome;
+    }
+    return 'Assinatura do Responsável da Escola';
   }
 }
 

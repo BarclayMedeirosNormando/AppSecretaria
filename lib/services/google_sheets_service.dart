@@ -125,10 +125,24 @@ class GoogleSheetsService {
       'responsavel': report.responsiblePerson ?? '',
     };
 
-    // Se tiver assinatura, converte para Base64
+    // Se tiver assinatura única, converte para Base64 e adiciona campos legados.
     if (report.signatureBytes != null) {
       data['assinaturaBase64'] = base64Encode(report.signatureBytes!);
       data['assinaturaNome'] = 'assinatura_${report.id}.png';
+    }
+
+    // Se tiver múltiplas assinaturas, transmite em lista também.
+    if (report.signatureBytesList != null && report.signatureBytesList!.isNotEmpty) {
+      data['signatureBytesList'] = report.signatureBytesList!
+          .map((bytes) => base64Encode(bytes))
+          .toList();
+      data['assinaturaBase64List'] = report.signatureBytesList!
+          .map((bytes) => base64Encode(bytes))
+          .toList();
+    }
+
+    if (report.signatureUrlList != null && report.signatureUrlList!.isNotEmpty) {
+      data['signatureUrlList'] = report.signatureUrlList;
     }
 
     // Trata múltiplas fotos e funciona tanto no Web quanto no Celular!
@@ -1686,7 +1700,10 @@ class GoogleSheetsService {
       'tecnicos': normalizedTechnicians,
       'responsiblePerson': payload['responsavel'],
       'signatureBytes': payload['assinaturaBase64'],
+      'signatureBytesList': payload['signatureBytesList'],
+      'assinaturaBase64List': payload['assinaturaBase64List'],
       'signatureUrl': normalizedSignatureUrl,
+      'signatureUrlList': payload['signatureUrlList'],
       'urlAssinatura': normalizedSignatureUrl,
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'urlFotos': normalizedUrlFotos,

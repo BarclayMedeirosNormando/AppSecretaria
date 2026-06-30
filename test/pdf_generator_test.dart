@@ -39,6 +39,11 @@ void main() {
           ],
           signatureBytes: signatureBytes,
         ),
+        _report(
+          id: 'com-multiplas-assinaturas',
+          signatureBytesList: [signatureBytes, signatureBytes],
+          technicians: const ['Técnico A', 'Técnico B'],
+        ),
         _report(id: 'sem-fotos', photos: const []),
       ];
 
@@ -58,6 +63,8 @@ ReportModel _report({
   List<TiMaterialItem> tiMaterials = const [],
   List<PhotoItem> photos = const [],
   Uint8List? signatureBytes,
+  List<Uint8List>? signatureBytesList,
+  List<String> technicians = const ['José de Sena Brito Junior'],
 }) {
   return ReportModel(
     id: id,
@@ -73,8 +80,9 @@ ReportModel _report({
     tiMaterials: tiMaterials,
     gre: '01ª GRE',
     photos: photos,
-    technicians: const ['José de Sena Brito Junior'],
+    technicians: technicians,
     responsiblePerson: 'Maria da Silva',
     signatureBytes: signatureBytes,
+    signatureBytesList: signatureBytesList,
   );
 }
