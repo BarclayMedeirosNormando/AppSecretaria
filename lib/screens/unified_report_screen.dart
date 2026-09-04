@@ -821,6 +821,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
             LayoutBuilder(
               builder: (context, constraints) {
                 return Autocomplete<SchoolModel>(
+                  key: ValueKey('school_search_${_filterRegional}_$_filterCity'),
                   textEditingController: _schoolSearchController,
                   focusNode: _schoolSearchFocusNode,
                   displayStringForOption: (option) => option.name,
