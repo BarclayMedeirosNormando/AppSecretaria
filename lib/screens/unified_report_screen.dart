@@ -492,7 +492,13 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
         }
       }
 
-      if (signatureBytesList.isEmpty) {
+      final hasExistingSignatureUrl = widget.existingReport != null &&
+          ((widget.existingReport!.signatureUrl != null &&
+                  widget.existingReport!.signatureUrl!.trim().isNotEmpty) ||
+              (widget.existingReport!.signatureUrlList != null &&
+                  widget.existingReport!.signatureUrlList!.isNotEmpty));
+
+      if (signatureBytesList.isEmpty && !hasExistingSignatureUrl) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('A assinatura é obrigatória para novos relatórios.')),
         );
