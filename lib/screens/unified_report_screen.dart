@@ -395,7 +395,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
   }
 
   void _syncSignatureControllersWithTechnicians() {
-    final keepCount = _selectedTechnicians.length;
+    final keepCount = _isTechnicalAnalysis ? _selectedTechnicians.length : 1;
     final existingCount = _signatureControllers.length;
     final newControllers = <SignatureController>[];
 
@@ -1018,7 +1018,10 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
       title: 'Motivos / Assuntos',
       icon: Icons.category_outlined,
       child: InkWell(
-        onTap: () => _openMultiSelect('Motivo do Chamado', _mockSubjects, _selectedSubjects, (res) => _selectedSubjects = res),
+        onTap: () => _openMultiSelect('Motivo do Chamado', _mockSubjects, _selectedSubjects, (res) {
+          _selectedSubjects = res;
+          _syncSignatureControllersWithTechnicians();
+        }),
         borderRadius: BorderRadius.circular(12),
         child: InputDecorator(
           decoration: InputDecoration(
@@ -1612,112 +1615,210 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
     return SectionCard(
       title: _isTechnicalAnalysis ? 'Assinatura do Técnico' : 'Assinatura do Responsável',
       icon: Icons.draw_outlined,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_selectedTechnicians.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(14),
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceVariant.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: theme.colorScheme.outlineVariant.withOpacity(0.35)),
-              ),
-              child: Text(
-                'Selecione pelo menos um técnico para capturar a assinatura.',
-                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ),
-            )
-          else ...[
-            if (widget.existingReport != null &&
-                widget.existingReport!.signatureBytesList != null &&
-                widget.existingReport!.signatureBytesList!.isNotEmpty &&
-                _signatureControllers.every((c) => c.isEmpty))
-              Container(
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.tertiary.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: theme.colorScheme.tertiary.withOpacity(0.25)),
+      child: _isTechnicalAnalysis
+          ? _buildTechnicianSignatures(theme, isDark)
+          : _buildResponsibleSignature(theme, isDark),
+    );
+  }
+
+  Widget _buildTechnicianSignatures(ThemeData theme, bool isDark) {
+    if (_selectedTechnicians.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceVariant.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.colorScheme.outlineVariant.withOpacity(0.35)),
+        ),
+        child: Text(
+          'Selecione pelo menos um técnico para capturar a assinatura.',
+          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.existingReport != null &&
+            widget.existingReport!.signatureBytesList != null &&
+            widget.existingReport!.signatureBytesList!.isNotEmpty &&
+            _signatureControllers.every((c) => c.isEmpty))
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.tertiary.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: theme.colorScheme.tertiary.withOpacity(0.25)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: theme.colorScheme.tertiary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Assinaturas salvas anteriormente. Desenhe abaixo apenas se quiser alterar as assinaturas atuais.',
+                    style: TextStyle(color: theme.colorScheme.tertiary, fontSize: 13),
+                  ),
                 ),
-                child: Row(
+              ],
+            ),
+          ),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _selectedTechnicians.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 18),
+          itemBuilder: (context, index) {
+            final technician = _selectedTechnicians[index];
+            debugPrint('Construindo assinatura para técnico #$index: $technician');
+            final controller = index < _signatureControllers.length
+                ? _signatureControllers[index]
+                : SignatureController(
+                    penStrokeWidth: 3,
+                    penColor: Colors.black,
+                    exportBackgroundColor: Colors.white,
+                  );
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(Icons.info_outline, color: theme.colorScheme.tertiary, size: 20),
-                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Assinaturas salvas anteriormente. Desenhe abaixo apenas se quiser alterar as assinaturas atuais.',
-                        style: TextStyle(color: theme.colorScheme.tertiary, fontSize: 13),
+                        'Assinatura de $technician',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => controller.clear(),
+                      icon: const Icon(Icons.cleaning_services_rounded, size: 16),
+                      label: const Text('Limpar'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: theme.colorScheme.error,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        minimumSize: Size.zero,
                       ),
                     ),
                   ],
                 ),
-              ),
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _selectedTechnicians.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 18),
-              itemBuilder: (context, index) {
-                final technician = _selectedTechnicians[index];
-                debugPrint('Construindo assinatura para técnico #$index: $technician');
-                final controller = index < _signatureControllers.length
-                    ? _signatureControllers[index]
-                    : SignatureController(
-                        penStrokeWidth: 3,
-                        penColor: Colors.black,
-                        exportBackgroundColor: Colors.white,
-                      );
+                const SizedBox(height: 8),
+                Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Signature(
+                    controller: controller,
+                    height: 180,
+                    backgroundColor: isDark ? const Color(0xFFE0E0E0) : theme.colorScheme.surface,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
 
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Assinatura de $technician',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: () => controller.clear(),
-                          icon: const Icon(Icons.cleaning_services_rounded, size: 16),
-                          label: const Text('Limpar'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: theme.colorScheme.error,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            minimumSize: Size.zero,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      clipBehavior: Clip.antiAlias,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: theme.colorScheme.outlineVariant),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Signature(
-                        controller: controller,
-                        height: 180,
-                        backgroundColor: isDark ? const Color(0xFFE0E0E0) : theme.colorScheme.surface,
-                      ),
-                    ),
-                  ],
-                );
-              },
+  Widget _buildResponsibleSignature(ThemeData theme, bool isDark) {
+    if (_selectedResponsible == null || _selectedResponsible!.trim().isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceVariant.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.colorScheme.outlineVariant.withOpacity(0.35)),
+        ),
+        child: Text(
+          'Selecione o responsável pela escola para capturar a assinatura.',
+          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      );
+    }
+
+    final controller = _signatureControllers.isNotEmpty
+        ? _signatureControllers.first
+        : SignatureController(
+            penStrokeWidth: 3,
+            penColor: Colors.black,
+            exportBackgroundColor: Colors.white,
+          );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.existingReport != null &&
+            widget.existingReport!.signatureBytesList != null &&
+            widget.existingReport!.signatureBytesList!.isNotEmpty &&
+            _signatureControllers.every((c) => c.isEmpty))
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.tertiary.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: theme.colorScheme.tertiary.withOpacity(0.25)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: theme.colorScheme.tertiary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Assinatura salva anteriormente. Desenhe abaixo apenas se quiser alterar a assinatura atual.',
+                    style: TextStyle(color: theme.colorScheme.tertiary, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                'Assinatura de $_selectedResponsible',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () => controller.clear(),
+              icon: const Icon(Icons.cleaning_services_rounded, size: 16),
+              label: const Text('Limpar'),
+              style: TextButton.styleFrom(
+                foregroundColor: theme.colorScheme.error,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                minimumSize: Size.zero,
+              ),
             ),
           ],
-        ],
-      ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Signature(
+            controller: controller,
+            height: 180,
+            backgroundColor: isDark ? const Color(0xFFE0E0E0) : theme.colorScheme.surface,
+          ),
+        ),
+      ],
     );
   }
 
