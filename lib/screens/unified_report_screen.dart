@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:signature/signature.dart';
 import '../models/report_model.dart';
 import '../widgets/multi_select_dialog.dart';
@@ -27,8 +29,13 @@ class UnifiedReportScreen extends StatefulWidget {
   State<UnifiedReportScreen> createState() => _UnifiedReportScreenState();
 }
 
-class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
+class _UnifiedReportScreenState extends State<UnifiedReportScreen> with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
+
+  static const String _draftPrefsKey = 'unified_report_draft_v1';
+  Timer? _draftTimer;
+  String? _lastSavedDraftJson;
+  bool _draftSubmitted = false;
 
   DateTime? _selectedDate;
   String? _selectedSchool;
@@ -341,6 +348,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _schoolSearchController = TextEditingController();
     _schoolSearchFocusNode = FocusNode();
 
@@ -392,6 +400,170 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
     _loadSchools();
     _loadTechnicians();
     _syncSignatureControllersWithTechnicians();
+
+    // Rascunho automático: só para relatórios novos (edição já parte de dados
+    // reais salvos no servidor, então não precisa de rascunho local).
+    if (widget.existingReport == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkForSavedDraft());
+      _draftTimer = Timer.periodic(const Duration(seconds: 2), (_) => _saveDraftIfChanged());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _saveDraftIfChanged();
+    }
+  }
+
+  Map<String, dynamic> _buildDraftSnapshot() {
+    return {
+      'selectedDate': _selectedDate?.toIso8601String(),
+      'selectedSchool': _selectedSchool,
+      'selectedSchoolAddress': _selectedSchoolAddress,
+      'selectedSchoolCity': _selectedSchoolCity,
+      'selectedSchoolInep': _selectedSchoolInep,
+      'gre': _gre,
+      'selectedResponsible': _selectedResponsible,
+      'filterRegional': _filterRegional,
+      'filterCity': _filterCity,
+      'selectedSubjects': _selectedSubjects,
+      'selectedTechnicians': _selectedTechnicians,
+      'observations': _observationsController.text,
+      'schoolSearchText': _schoolSearchController.text,
+      'photos': _selectedPhotos.map((p) => p.toJson()).toList(),
+      'tiMaterials': _tiMaterials.map((m) => m.toJson()).toList(),
+      'savedAt': DateTime.now().toIso8601String(),
+    };
+  }
+
+  bool _isDraftSnapshotEmpty(Map<String, dynamic> snapshot) {
+    return (snapshot['selectedSchool'] == null || (snapshot['selectedSchool'] as String).trim().isEmpty) &&
+        (snapshot['selectedSubjects'] as List).isEmpty &&
+        (snapshot['selectedTechnicians'] as List).isEmpty &&
+        (snapshot['selectedResponsible'] == null) &&
+        (snapshot['observations'] as String).trim().isEmpty &&
+        (snapshot['photos'] as List).isEmpty &&
+        (snapshot['tiMaterials'] as List).isEmpty;
+  }
+
+  Future<void> _saveDraftIfChanged() async {
+    if (_draftSubmitted) return;
+    try {
+      final snapshot = _buildDraftSnapshot();
+      if (_isDraftSnapshotEmpty(snapshot)) return;
+
+      final encoded = jsonEncode(snapshot);
+      if (encoded == _lastSavedDraftJson) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_draftPrefsKey, encoded);
+      _lastSavedDraftJson = encoded;
+    } catch (e) {
+      debugPrint('Erro ao salvar rascunho do relatório: $e');
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_draftPrefsKey);
+      _lastSavedDraftJson = null;
+    } catch (e) {
+      debugPrint('Erro ao limpar rascunho do relatório: $e');
+    }
+  }
+
+  Future<void> _checkForSavedDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_draftPrefsKey);
+      if (raw == null || raw.trim().isEmpty) return;
+
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      if (_isDraftSnapshotEmpty(decoded)) {
+        await prefs.remove(_draftPrefsKey);
+        return;
+      }
+      if (!mounted) return;
+
+      final schoolLabel = (decoded['selectedSchool'] as String?)?.trim();
+      final savedAtRaw = decoded['savedAt'] as String?;
+      String savedAtLabel = '';
+      if (savedAtRaw != null) {
+        final savedAt = DateTime.tryParse(savedAtRaw);
+        if (savedAt != null) {
+          savedAtLabel = ' (${savedAt.day.toString().padLeft(2, '0')}/${savedAt.month.toString().padLeft(2, '0')} às ${savedAt.hour.toString().padLeft(2, '0')}:${savedAt.minute.toString().padLeft(2, '0')})';
+        }
+      }
+
+      final shouldRestore = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Rascunho encontrado'),
+          content: Text(
+            (schoolLabel != null && schoolLabel.isNotEmpty)
+                ? 'Você tem um relatório não finalizado de "$schoolLabel"$savedAtLabel. Deseja continuar de onde parou?'
+                : 'Você tem um relatório não finalizado$savedAtLabel. Deseja continuar de onde parou?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Começar novo'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Continuar rascunho'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldRestore == true) {
+        _applyDraftSnapshot(decoded);
+      } else {
+        await prefs.remove(_draftPrefsKey);
+      }
+    } catch (e) {
+      debugPrint('Erro ao verificar rascunho salvo: $e');
+    }
+  }
+
+  void _applyDraftSnapshot(Map<String, dynamic> snapshot) {
+    setState(() {
+      final dateStr = snapshot['selectedDate'] as String?;
+      _selectedDate = dateStr != null ? DateTime.tryParse(dateStr) : null;
+      _selectedSchool = snapshot['selectedSchool'] as String?;
+      _selectedSchoolAddress = snapshot['selectedSchoolAddress'] as String?;
+      _selectedSchoolCity = snapshot['selectedSchoolCity'] as String?;
+      _selectedSchoolInep = snapshot['selectedSchoolInep'] as String?;
+      _gre = snapshot['gre'] as String?;
+      _selectedResponsible = snapshot['selectedResponsible'] as String?;
+      _filterRegional = snapshot['filterRegional'] as String?;
+      _filterCity = snapshot['filterCity'] as String?;
+      _selectedSubjects = List<String>.from(snapshot['selectedSubjects'] as List? ?? []);
+      _selectedTechnicians = List<String>.from(snapshot['selectedTechnicians'] as List? ?? []);
+      _observationsController.text = snapshot['observations'] as String? ?? '';
+      _schoolSearchController.text = snapshot['schoolSearchText'] as String? ?? (snapshot['selectedSchool'] as String? ?? '');
+      _selectedPhotos
+        ..clear()
+        ..addAll((snapshot['photos'] as List? ?? [])
+            .map((p) => PhotoItem.fromJson(Map<String, dynamic>.from(p as Map))));
+      _tiMaterials
+        ..clear()
+        ..addAll((snapshot['tiMaterials'] as List? ?? [])
+            .map((m) => TiMaterialItem.fromJson(Map<String, dynamic>.from(m as Map))));
+      _lastSavedDraftJson = jsonEncode(snapshot);
+      _syncSignatureControllersWithTechnicians();
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Rascunho restaurado. Confira os dados e desenhe a assinatura novamente antes de salvar.')),
+      );
+    }
   }
 
   void _syncSignatureControllersWithTechnicians() {
@@ -528,6 +700,9 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
         signatureUrlList: widget.existingReport?.signatureUrlList ??
             (widget.existingReport?.signatureUrl != null ? [widget.existingReport!.signatureUrl!] : null),
       );
+
+      _draftSubmitted = true;
+      await _clearDraft();
 
       if (!mounted) return;
       Navigator.of(context).pop(report);
@@ -2013,6 +2188,13 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
 
   @override
   void dispose() {
+    _draftTimer?.cancel();
+    if (!_draftSubmitted) {
+      // Última tentativa de salvar o progresso antes da tela ser destruída
+      // (ex.: usuário saiu sem enviar). Não precisa aguardar.
+      unawaited(_saveDraftIfChanged());
+    }
+    WidgetsBinding.instance.removeObserver(this);
     _schoolSearchController.dispose();
     _schoolSearchFocusNode.dispose();
     _observationsController.dispose();
