@@ -1627,6 +1627,58 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
     );
   }
 
+  Widget _buildSavedSignaturePreview(String? url, ThemeData theme) {
+    if (url == null || url.trim().isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Assinatura salva anteriormente:',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(12),
+              color: Colors.white,
+            ),
+            child: Image.network(
+              url,
+              height: 100,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => Container(
+                height: 100,
+                alignment: Alignment.center,
+                child: Icon(Icons.broken_image_outlined, color: theme.colorScheme.onSurfaceVariant),
+              ),
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return SizedBox(
+                  height: 100,
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTechnicianSignatures(ThemeData theme, bool isDark) {
     if (_selectedTechnicians.isEmpty) {
       return Container(
@@ -1643,13 +1695,15 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
       );
     }
 
+    final hasAnyExistingSignature = widget.existingReport != null &&
+        (((widget.existingReport!.signatureBytesList?.isNotEmpty) ?? false) ||
+            ((widget.existingReport!.signatureUrlList?.isNotEmpty) ?? false)) &&
+        _signatureControllers.every((c) => c.isEmpty);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.existingReport != null &&
-            widget.existingReport!.signatureBytesList != null &&
-            widget.existingReport!.signatureBytesList!.isNotEmpty &&
-            _signatureControllers.every((c) => c.isEmpty))
+        if (hasAnyExistingSignature)
           Container(
             padding: const EdgeInsets.all(12),
             margin: const EdgeInsets.only(bottom: 16),
@@ -1687,6 +1741,13 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                     exportBackgroundColor: Colors.white,
                   );
 
+            final existingUrlList = widget.existingReport?.signatureUrlList;
+            final existingUrl = (controller.isEmpty &&
+                    existingUrlList != null &&
+                    index < existingUrlList.length)
+                ? existingUrlList[index]
+                : null;
+
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1715,6 +1776,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
+                _buildSavedSignaturePreview(existingUrl, theme),
                 Container(
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
@@ -1759,13 +1821,24 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
             exportBackgroundColor: Colors.white,
           );
 
+    final hasExistingResponsibleSignature = widget.existingReport != null &&
+        (((widget.existingReport!.signatureBytesList?.isNotEmpty) ?? false) ||
+            (widget.existingReport!.signatureUrl != null &&
+                widget.existingReport!.signatureUrl!.trim().isNotEmpty) ||
+            ((widget.existingReport!.signatureUrlList?.isNotEmpty) ?? false)) &&
+        controller.isEmpty;
+
+    final existingResponsibleUrl = hasExistingResponsibleSignature
+        ? (widget.existingReport!.signatureUrl ??
+            (widget.existingReport!.signatureUrlList?.isNotEmpty == true
+                ? widget.existingReport!.signatureUrlList!.first
+                : null))
+        : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.existingReport != null &&
-            widget.existingReport!.signatureBytesList != null &&
-            widget.existingReport!.signatureBytesList!.isNotEmpty &&
-            _signatureControllers.every((c) => c.isEmpty))
+        if (hasExistingResponsibleSignature)
           Container(
             padding: const EdgeInsets.all(12),
             margin: const EdgeInsets.only(bottom: 16),
@@ -1812,6 +1885,7 @@ class _UnifiedReportScreenState extends State<UnifiedReportScreen> {
           ],
         ),
         const SizedBox(height: 8),
+        _buildSavedSignaturePreview(existingResponsibleUrl, theme),
         Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(

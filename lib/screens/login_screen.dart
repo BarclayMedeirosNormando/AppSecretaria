@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:io' show Platform;
@@ -9,7 +10,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../widgets/custom_text_field.dart';
 import '../services/technician_service.dart';
 import '../services/google_sheets_service.dart';
-import '../utils/app_version.dart';
 import '../widgets/app_ui.dart';
 import 'home_screen.dart';
 
@@ -21,8 +21,10 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  static const String appVersion = AppVersion.version;
-  
+  // Versão lida em tempo de execução a partir do pubspec.yaml (via
+  // package_info_plus), eliminando a duplicação manual que existia antes.
+  String appVersion = '';
+
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -32,6 +34,17 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    _loadAppVersionAndCheckUpdate();
+  }
+
+  Future<void> _loadAppVersionAndCheckUpdate() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      appVersion = info.version;
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('Erro ao obter a versão do app via PackageInfo: $e');
+    }
     _checkUpdate();
   }
 
@@ -183,7 +196,9 @@ class _LoginScreenState extends State<LoginScreen> {
           final requiredVersion = updateInfo['requiredVersion'] ?? '';
           final link = updateInfo['downloadLink'] ?? '';
 
-          if (requiredVersion.isNotEmpty && _isVersionLower(appVersion, requiredVersion)) {
+          if (appVersion.isNotEmpty &&
+              requiredVersion.isNotEmpty &&
+              _isVersionLower(appVersion, requiredVersion)) {
             if (link.isEmpty) {
               _showMissingPlatformLinkDialog(requiredVersion);
             } else {
@@ -209,7 +224,9 @@ class _LoginScreenState extends State<LoginScreen> {
         final requiredVersion = updateInfo['requiredVersion'] ?? '';
         final link = updateInfo['downloadLink'] ?? '';
 
-        if (requiredVersion.isNotEmpty && _isVersionLower(appVersion, requiredVersion)) {
+        if (appVersion.isNotEmpty &&
+            requiredVersion.isNotEmpty &&
+            _isVersionLower(appVersion, requiredVersion)) {
           if (link.isEmpty) {
             _showMissingPlatformLinkDialog(requiredVersion);
           } else {
@@ -541,7 +558,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'Versão $appVersion',
+                                appVersion.isEmpty ? 'Versão...' : 'Versão $appVersion',
                                 style: textTheme.bodySmall?.copyWith(
                                   color: colorScheme.onSurfaceVariant,
                                   fontWeight: FontWeight.w600,

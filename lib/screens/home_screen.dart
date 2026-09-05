@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../main.dart'; // Para acessar o themeNotifier
 import '../models/report_model.dart';
@@ -30,7 +32,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final List<ReportModel> _reports = [];
   final GoogleSheetsService _sheetsService = GoogleSheetsService();
   String _loggedUser = 'Técnico';
@@ -43,23 +45,74 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _hasAutoSyncedOnStart = false;
   String _syncStatusMessage = '';
   DateTime? _lastSyncAt;
-  
+
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  Timer? _periodicSyncTimer;
+  bool _hasConnection = true;
+
   // Navigation State
   String _searchQuery = '';
   NavigationLevel _currentLevel = NavigationLevel.regional;
   String? _selectedRegional;
   String? _selectedCity;
   String? _selectedSchool;
-  
+
   TechnicianModel? _currentTechnician;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadInitialData();
     _updateSyncCount();
     // Start automatic synchronization once when HomeScreen is first shown
     _autoSyncOnStart();
+    _setupConnectivityRetry();
+    _setupPeriodicSyncRetry();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _connectivitySubscription?.cancel();
+    _periodicSyncTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _retrySyncIfPending();
+    }
+  }
+
+  void _setupConnectivityRetry() {
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen((results) {
+      final hasConnection =
+          results.any((result) => result != ConnectivityResult.none);
+      // Only retry on the transition from offline to online, to avoid
+      // firing a sync attempt on every connectivity event.
+      if (hasConnection && !_hasConnection) {
+        _retrySyncIfPending();
+      }
+      _hasConnection = hasConnection;
+    });
+  }
+
+  void _setupPeriodicSyncRetry() {
+    // Safety net in case a connectivity/resume event is missed.
+    _periodicSyncTimer =
+        Timer.periodic(const Duration(minutes: 3), (_) {
+      _retrySyncIfPending();
+    });
+  }
+
+  void _retrySyncIfPending() {
+    if (!mounted || _isSyncing) return;
+    if (_pendingSyncCount <= 0) return;
+    _runSync(manual: false);
   }
 
     Future<void> _updateSyncCount() async {
@@ -530,8 +583,14 @@ class _HomeScreenState extends State<HomeScreen> {
             msg.contains('failed host lookup') ||
             msg.contains('network')) {
           _syncStatusMessage = 'Sem conexão. Usando dados salvos.';
+        } else if (manual) {
+          _syncStatusMessage = 'Não foi possível sincronizar agora.';
+        } else if (_pendingSyncCount > 0) {
+          // Preserve visibility of pending items instead of blanking the
+          // status message on a silent automatic-sync failure.
+          _syncStatusMessage = '$_pendingSyncCount pendência(s) para enviar';
         } else {
-          _syncStatusMessage = manual ? 'Não foi possível sincronizar agora.' : '';
+          _syncStatusMessage = '';
         }
       });
 
